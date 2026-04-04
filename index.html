@@ -256,6 +256,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
 <script>
 const SKEL=[[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+// BlazePose(33点) → MoveNet互換(17点) インデックス変換テーブル
+const BP_TO_MN=[[0,0],[2,1],[5,2],[7,3],[8,4],[11,5],[12,6],[13,7],[14,8],[15,9],[16,10],[23,11],[24,12],[25,13],[26,14],[27,15],[28,16]];
+function remapBlazePose(bpKp){const kp=Array.from({length:17},()=>({x:0,y:0,score:0}));BP_TO_MN.forEach(([bi,mi])=>{if(bpKp[bi])kp[mi]={x:bpKp[bi].x,y:bpKp[bi].y,score:bpKp[bi].score??0};});return kp;}
 const GRADE_RANK={ng:3,warn:2,ok:1,na:0};
 
 // ── Movement configs ──────────────────────────────────────────────────────────
@@ -509,7 +512,7 @@ document.getElementById('camCanvas').addEventListener('click',function(){
 (async()=>{
   try{
     await tf.setBackend('webgl'); await tf.ready();
-    detector=await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,{modelType:poseDetection.movenet.modelType.SINGLEPOSE_THUNDER});
+    detector=await poseDetection.createDetector(poseDetection.SupportedModels.BlazePose,{runtime:'tfjs',modelType:'full'});
     document.getElementById('loadingOverlay').style.display='none';
   }catch(e){document.getElementById('loadingText').innerHTML='<span style="color:#e53e3e">読み込み失敗。インターネット接続を確認して再読み込みしてください。</span>';console.error(e);}
 })();
@@ -643,7 +646,7 @@ async function processFrame(src, canvas, view, histKey){
     if(isVid)updateVidMetrics(view,null);else updateCamMetrics(null);
     return;
   }
-  const kp=poses[0].keypoints;
+  const kp=remapBlazePose(poses[0].keypoints);
   drawSkeleton(ctx,kp);
   const m=MOVES[currentMove];
   const evalFn=view==='side'?m.sideEval:m.frontEval;
