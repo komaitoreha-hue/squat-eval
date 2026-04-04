@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="動作評価">
+  <title>スポーツ整形 動作評価</title>
+  <style>
+    * { box-sizing:border-box;margin:0;padding:0; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;background:#f0f4f8;color:#1a202c; }
+
+    #loadingOverlay { position:fixed;inset:0;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999; }
+    .spinner { width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:#2b6cb0;border-radius:50%;animation:spin .8s linear infinite; }
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .loading-text { margin-top:16px;color:#4a5568;font-size:15px;text-align:center;padding:0 20px; }
+
+    header { background:#1a365d;color:white;padding:12px 16px;display:flex;align-items:center;justify-content:space-between; }
+    header h1 { font-size:16px;font-weight:700; }
+    header span { font-size:11px;opacity:.8; }
+
+    .tabs { display:flex;background:white;border-bottom:2px solid #e2e8f0; }
+    .tab { flex:1;padding:12px 8px;text-align:center;font-size:14px;font-weight:600;color:#718096;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px; }
+    .tab.active { color:#2b6cb0;border-bottom-color:#2b6cb0; }
+
+    .move-bar { display:flex;gap:8px;padding:10px 14px;overflow-x:auto;background:white;border-bottom:1px solid #e2e8f0;-webkit-overflow-scrolling:touch; }
+    .move-bar::-webkit-scrollbar { display:none; }
+    .move-btn { flex-shrink:0;padding:7px 15px;border:2px solid #e2e8f0;border-radius:20px;background:white;font-size:13px;font-weight:600;color:#4a5568;cursor:pointer;white-space:nowrap; }
+    .move-btn.active { background:#2b6cb0;border-color:#2b6cb0;color:white; }
+
+    .panel { display:none; }
+    .panel.active { display:block; }
+
+    .view-toggle { display:flex;background:white;border-bottom:1px solid #e2e8f0;padding:8px 14px;gap:8px; }
+    .vtb { flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;background:white;font-size:13px;font-weight:600;color:#718096;cursor:pointer; }
+    .vtb.active { background:#2b6cb0;color:white;border-color:#2b6cb0; }
+
+    .media-wrap { position:relative;width:100%;background:#000;overflow:hidden; }
+    .media-wrap canvas { display:block;width:100%;height:auto;max-height:52vh;object-fit:contain; }
+    .media-wrap video { display:none; }
+    .phase-badge { position:absolute;top:8px;left:8px;background:rgba(0,0,0,.65);color:white;padding:4px 11px;border-radius:18px;font-size:12px;font-weight:700;pointer-events:none;transition:background .2s; }
+    .phase-badge.alert { background:rgba(197,48,48,.9); }
+    .flip-btn { position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);border:none;color:white;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer; }
+
+    .dual-panel { display:grid;grid-template-columns:1fr 1fr;gap:2px;background:#cbd5e0;border-top:2px solid #cbd5e0; }
+    .vid-pane { background:white;display:flex;flex-direction:column; }
+    .pane-hdr { background:#2b6cb0;color:white;text-align:center;padding:5px 4px;font-size:12px;font-weight:700;letter-spacing:.05em; }
+    .vid-pane .media-wrap canvas { max-height:30vh; }
+    .mini-bar { display:none;align-items:center;gap:3px;padding:5px 6px;background:#1a202c; }
+    .mini-bar button { background:none;border:none;color:white;font-size:14px;cursor:pointer;padding:1px 3px;line-height:1; }
+    .mini-prog { flex:1;height:4px;background:#4a5568;border-radius:2px;cursor:pointer; }
+    .mini-prog div { height:100%;background:#63b3ed;border-radius:2px;pointer-events:none;width:0%; }
+    .mini-time { color:#a0aec0;font-size:10px;white-space:nowrap; }
+    .pane-btn { margin:7px;padding:8px 4px;background:#2b6cb0;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer; }
+
+    .controls { display:flex;gap:10px;padding:12px 14px;background:white; }
+    .btn { flex:1;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer; }
+    .btn-primary { background:#2b6cb0;color:white; }
+    .btn-danger  { background:#e53e3e;color:white; }
+    .btn-summary { background:#2c7a7b;color:white; }
+    .btn:disabled { opacity:.38;pointer-events:none; }
+
+    .tip { background:#ebf8ff;border-left:4px solid #4299e1;padding:8px 14px;margin:8px 14px;border-radius:0 8px 8px 0;font-size:12px;line-height:1.7;color:#2c5282; }
+    .view-tag { display:inline-block;padding:1px 7px;border-radius:6px;font-size:11px;font-weight:700;margin-right:4px; }
+    .vt-side  { background:#e9d8fd;color:#553c9a; }
+    .vt-front { background:#c6f6d5;color:#22543d; }
+    .vt-both  { background:#fefcbf;color:#744210; }
+
+    .metrics { display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:0 14px 14px; }
+    .sec-label { grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#4a5568;padding:6px 0 2px;border-bottom:1px solid #e2e8f0;margin-top:2px; }
+    .card { background:white;border-radius:11px;padding:11px;box-shadow:0 1px 3px rgba(0,0,0,.08); }
+    .card.wide { grid-column:1/-1; }
+    .card-label { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#718096;margin-bottom:4px; }
+    .card-val { font-size:26px;font-weight:800;color:#1a202c;line-height:1; }
+    .card-val .unit { font-size:13px;font-weight:400;color:#a0aec0; }
+    .badge { display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-top:4px; }
+    .ok   { background:#c6f6d5;color:#22543d; }
+    .warn { background:#fefcbf;color:#744210; }
+    .ng   { background:#fed7d7;color:#742a2a; }
+    .na   { background:#e2e8f0;color:#718096; }
+
+    /* ── Summary modal ── */
+    .modal { position:fixed;inset:0;z-index:600;display:flex;flex-direction:column;justify-content:flex-end; }
+    .modal-bg { position:absolute;inset:0;background:rgba(0,0,0,.5); }
+    .modal-sheet { position:relative;background:white;border-radius:18px 18px 0 0;max-height:84vh;overflow-y:auto; }
+    .modal-hdr { display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #e2e8f0;position:sticky;top:0;background:white;z-index:1; }
+    .modal-hdr h2 { font-size:16px;font-weight:700; }
+    .modal-hdr button { background:none;border:none;font-size:22px;color:#a0aec0;cursor:pointer;line-height:1; }
+    .modal-body { padding:12px 14px 32px; }
+
+    .peak-row { display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f7fafc; }
+    .peak-info .card-label { margin-bottom:2px; }
+    .peak-info .card-val { font-size:22px; }
+    .jump-btn { background:#ebf8ff;border:none;color:#2b6cb0;padding:6px 11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;margin-left:8px; }
+
+    .comment-card { border-radius:10px;padding:12px;margin-bottom:8px; }
+    .comment-card.ok   { background:#f0fff4;border-left:4px solid #38a169; }
+    .comment-card.warn { background:#fffbeb;border-left:4px solid #d69e2e; }
+    .comment-card.ng   { background:#fff5f5;border-left:4px solid #e53e3e; }
+    .comment-title { font-size:13px;font-weight:700;margin-bottom:5px; }
+    .comment-text  { font-size:12px;line-height:1.75;color:#4a5568; }
+
+    .overall-box { border-radius:12px;padding:14px;margin-bottom:12px;text-align:center; }
+    .overall-box.ok   { background:#f0fff4; }
+    .overall-box.warn { background:#fffbeb; }
+    .overall-box.ng   { background:#fff5f5; }
+    .overall-icon { font-size:36px; }
+    .overall-label { font-size:15px;font-weight:700;margin-top:6px; }
+
+    input[type=file] { display:none; }
+  </style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">AIモデル読み込み中...<br><small style="color:#a0aec0">初回は少し時間がかかります</small></div>
+</div>
+
+<!-- Summary modal -->
+<div class="modal" id="summaryModal" style="display:none">
+  <div class="modal-bg" onclick="closeSummary()"></div>
+  <div class="modal-sheet">
+    <div class="modal-hdr">
+      <h2 id="summaryTitle">解析サマリー</h2>
+      <button onclick="closeSummary()">&#10005;</button>
+    </div>
+    <div class="modal-body" id="summaryBody"></div>
+  </div>
+</div>
+
+<header>
+  <h1>スポーツ整形 動作評価</h1>
+  <span>AI姿勢解析</span>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('cam')">カメラ (リアルタイム)</div>
+  <div class="tab" onclick="switchTab('vid')">動画解析 (側面+正面)</div>
+</div>
+
+<div class="move-bar">
+  <button class="move-btn active" data-move="squat"     onclick="selectMove('squat')">スクワット</button>
+  <button class="move-btn"        data-move="lunge"     onclick="selectMove('lunge')">ランジ</button>
+  <button class="move-btn"        data-move="singleLeg" onclick="selectMove('singleLeg')">片足SQ</button>
+  <button class="move-btn"        data-move="jump"      onclick="selectMove('jump')">ジャンプ着地</button>
+  <button class="move-btn"        data-move="cut"       onclick="selectMove('cut')">切り返し</button>
+  <button class="move-btn"        data-move="stop"      onclick="selectMove('stop')">ストップ</button>
+</div>
+
+<!-- ══ CAMERA ══ -->
+<div class="panel active" id="camPanel">
+  <div class="view-toggle">
+    <button class="vtb active" id="vtbSide"  onclick="setCamView('side')">側面撮影中</button>
+    <button class="vtb"        id="vtbFront" onclick="setCamView('front')">正面撮影中</button>
+  </div>
+  <div class="media-wrap">
+    <video id="camVideo" autoplay muted playsinline></video>
+    <canvas id="camCanvas"></canvas>
+    <div class="phase-badge" id="camPhase">待機中</div>
+    <button class="flip-btn" onclick="flipCamera()">カメラ反転</button>
+  </div>
+  <div class="controls">
+    <button class="btn btn-primary" id="camStartBtn" onclick="startCamera()">カメラ開始</button>
+    <button class="btn btn-danger"  id="camStopBtn"  onclick="stopCamera()" disabled>停止</button>
+  </div>
+  <div class="tip">
+    <span class="view-tag vt-side" id="camViewTag">側面</span>
+    <span id="camTipText">側面から全身が映るよう撮影（1.5〜2m）。</span>
+  </div>
+  <div class="metrics" id="camMetrics"></div>
+</div>
+
+<!-- ══ VIDEO ══ -->
+<div class="panel" id="vidPanel">
+  <div class="dual-panel">
+    <div class="vid-pane">
+      <div class="pane-hdr">側面</div>
+      <div class="media-wrap">
+        <video id="sideVid" playsinline></video>
+        <canvas id="sideCanvas"></canvas>
+        <div class="phase-badge" id="sidePhase">動画を選択</div>
+      </div>
+      <div class="mini-bar" id="sideMiniBar">
+        <button onclick="stepVid(-1,'side')">&#9664;&#9664;</button>
+        <button onclick="toggleVid('side')" id="sidePlayBtn">&#9654;</button>
+        <button onclick="stepVid(1,'side')">&#9654;&#9654;</button>
+        <div class="mini-prog" onclick="seekVid(event,'side')"><div id="sideProg"></div></div>
+        <span class="mini-time" id="sideTime">0:00</span>
+      </div>
+      <button class="pane-btn" onclick="document.getElementById('sideFile').click()">側面動画を選択</button>
+      <input type="file" id="sideFile" accept="video/*" onchange="loadVid(event,'side')">
+    </div>
+    <div class="vid-pane">
+      <div class="pane-hdr">正面</div>
+      <div class="media-wrap">
+        <video id="frontVid" playsinline></video>
+        <canvas id="frontCanvas"></canvas>
+        <div class="phase-badge" id="frontPhase">動画を選択</div>
+      </div>
+      <div class="mini-bar" id="frontMiniBar">
+        <button onclick="stepVid(-1,'front')">&#9664;&#9664;</button>
+        <button onclick="toggleVid('front')" id="frontPlayBtn">&#9654;</button>
+        <button onclick="stepVid(1,'front')">&#9654;&#9654;</button>
+        <div class="mini-prog" onclick="seekVid(event,'front')"><div id="frontProg"></div></div>
+        <span class="mini-time" id="frontTime">0:00</span>
+      </div>
+      <button class="pane-btn" onclick="document.getElementById('frontFile').click()">正面動画を選択</button>
+      <input type="file" id="frontFile" accept="video/*" onchange="loadVid(event,'front')">
+    </div>
+  </div>
+
+  <!-- Summary button -->
+  <div style="padding:10px 14px 0;background:white">
+    <button class="btn btn-summary" id="summaryBtn" onclick="showSummary()" disabled style="width:100%">
+      解析サマリーを表示 📋
+    </button>
+  </div>
+
+  <div class="metrics" id="vidMetrics"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.17.0/dist/tf-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.17.0/dist/tf-backend-webgl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.17.0/dist/tf-converter.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+<script>
+const SKEL=[[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+const GRADE_RANK={ng:3,warn:2,ok:1,na:0};
+
+// ── Movement configs ──────────────────────────────────────────────────────────
+const MOVES={
+  squat:     {label:'スクワット',   sideTip:'全身が映るよう側面から（1.5〜2m）。',          frontTip:'全身が映るよう正面から（1.5〜2m）。',            sideKeys:['knee','trunk','hip','sym'],             frontKeys:['valgus','pelvicDrop'],            sideEval:evalGenericSide, frontEval:evalGenericFront, phaseFn:phaseSquat},
+  lunge:     {label:'ランジ',       sideTip:'側面から。前後の足が両方映るよう調整。',         frontTip:'正面から。前膝外反・骨盤安定性を確認。',           sideKeys:['frontKnee','rearKnee','trunk','pelvic'],  frontKeys:['valgus','pelvicDrop','trunkLat'], sideEval:evalLungeSide,   frontEval:evalGenericFront, phaseFn:phaseLunge},
+  singleLeg: {label:'片足SQ',       sideTip:'側面から全身が映るよう撮影。',                   frontTip:'正面から。ニーイン・骨盤下制を確認（最重要）。',   sideKeys:['knee','trunk'],                          frontKeys:['valgus','pelvicDrop','trunkLat'], sideEval:evalGenericSide, frontEval:evalSingleFront,  phaseFn:phaseSingleLeg},
+  jump:      {label:'ジャンプ着地', sideTip:'側面から。着地時の膝屈曲・体幹を確認。',        frontTip:'正面から。着地時の両膝外反を確認（最重要）。',     sideKeys:['knee','trunk'],                          frontKeys:['lValgus','rValgus','sym'],        sideEval:evalGenericSide, frontEval:evalJumpFront,    phaseFn:phaseJump},
+  cut:       {label:'切り返し',     sideTip:'側面から。接地時の膝屈曲・体幹前傾を確認。',    frontTip:'正面から。切り返し時のニーインを確認（最重要）。', sideKeys:['knee','trunk'],                          frontKeys:['valgus','trunkLat'],              sideEval:evalGenericSide, frontEval:evalCutFront,     phaseFn:phaseCut},
+  stop:      {label:'ストップ',     sideTip:'側面から。制動時の膝屈曲・体幹を確認。',        frontTip:'正面から。制動時の膝外反を確認。',               sideKeys:['knee','trunk','hip'],                    frontKeys:['valgus','pelvicDrop'],            sideEval:evalGenericSide, frontEval:evalGenericFront, phaseFn:phaseStop},
+};
+
+// ── Metric definitions ────────────────────────────────────────────────────────
+const MDEFS={
+  knee:      {label:'膝関節角度',   fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>145?['na','立位']:v>120?['warn','やや浅い']:v>=70?['ok','良好']:['warn','深すぎ']},
+  trunk:     {label:'体幹前傾角',   fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v<35?['ok','良好']:v<52?['warn','前傾注意']:['ng','前傾過大']},
+  hip:       {label:'股関節深さ',   fmt:v=>`<span style="font-size:20px">${v?'✅':'⚠️'}</span>`, grade:v=> v?['ok','膝以下']:['warn','膝以上']},
+  sym:       {label:'左右対称性',   fmt:v=> v==null?'--':`${Math.round(v)}<span class="unit"> °差</span>`, grade:v=> v==null?['na','検出不可']:v<8?['ok','対称良好']:v<18?['warn','左右差あり']:['ng','左右差大']},
+  valgus:    {label:'膝外反 FPPA',  fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>170?['ok','外反なし']:v>160?['warn','軽度外反']:['ng','⚡ ACLリスク']},
+  lValgus:   {label:'左膝 外反',    fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>170?['ok','良好']:v>160?['warn','軽度外反']:['ng','ACLリスク']},
+  rValgus:   {label:'右膝 外反',    fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>170?['ok','良好']:v>160?['warn','軽度外反']:['ng','ACLリスク']},
+  pelvicDrop:{label:'骨盤下制',     fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v<5?['ok','安定']:v<12?['warn','軽度下制']:['ng','Trend陽性疑']},
+  trunkLat:  {label:'体幹側方傾斜', fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v<8?['ok','良好']:v<15?['warn','傾き注意']:['ng','過大']},
+  frontKnee: {label:'前脚 膝角度',  fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>145?['na','立位']:v>120?['warn','やや浅い']:v>=60?['ok','良好']:['warn','深すぎ']},
+  rearKnee:  {label:'後脚 膝角度',  fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>145?['na','立位']:v>120?['warn','やや浅い']:v>=60?['ok','良好']:['warn','深すぎ']},
+  pelvic:    {label:'骨盤安定性',   fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v<5?['ok','安定']:v<12?['warn','注意']:['ng','不安定']},
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function calcAngle(a,b,c){const v1x=a.x-b.x,v1y=a.y-b.y,v2x=c.x-b.x,v2y=c.y-b.y,dot=v1x*v2x+v1y*v2y,mag=Math.sqrt((v1x*v1x+v1y*v1y)*(v2x*v2x+v2y*v2y));return mag<1?0:Math.acos(Math.max(-1,Math.min(1,dot/mag)))*180/Math.PI;}
+function ok(kp,...ii){return ii.every(i=>kp[i]&&kp[i].score>.3);}
+function avg(a){return a.reduce((s,v)=>s+v,0)/a.length;}
+function fwdLean(sh,hip){return Math.abs(Math.atan2(Math.abs(sh.x-hip.x),Math.abs(sh.y-hip.y))*180/Math.PI);}
+function latLean(kp){const mx=(kp[5].x+kp[6].x)/2,my=(kp[5].y+kp[6].y)/2,hx=(kp[11].x+kp[12].x)/2,hy=(kp[11].y+kp[12].y)/2;return Math.abs(Math.atan2(mx-hx,Math.abs(my-hy))*180/Math.PI);}
+function pelvTilt(kp){return Math.abs(Math.atan2(kp[12].y-kp[11].y,Math.abs(kp[12].x-kp[11].x))*180/Math.PI);}
+function bestSide(kp){const lv=ok(kp,5,11,13,15)?Math.min(kp[5].score,kp[11].score,kp[13].score,kp[15].score):0,rv=ok(kp,6,12,14,16)?Math.min(kp[6].score,kp[12].score,kp[14].score,kp[16].score):0;if(!lv&&!rv)return null;return rv>=lv?{sh:kp[6],hip:kp[12],knee:kp[14],ank:kp[16]}:{sh:kp[5],hip:kp[11],knee:kp[13],ank:kp[15]};}
+function fmt(s){if(!isFinite(s))return'0:00';return`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;}
+
+// ── Eval functions ────────────────────────────────────────────────────────────
+function evalGenericSide(kp){const s=bestSide(kp);if(!s)return null;const knee=calcAngle(s.hip,s.knee,s.ank),trunk=fwdLean(s.sh,s.hip),hip=s.hip.y>s.knee.y,lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):null,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):null;return{knee,trunk,hip,sym:lK!=null&&rK!=null?Math.abs(lK-rK):null};}
+function evalLungeSide(kp){if(!ok(kp,11,13,15)&&!ok(kp,12,14,16))return null;const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180,s=bestSide(kp);return{frontKnee:Math.min(lK,rK),rearKnee:Math.max(lK,rK),trunk:s?fwdLean(s.sh,s.hip):0,pelvic:ok(kp,11,12)?pelvTilt(kp):0};}
+function evalGenericFront(kp){const lV=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):null,rV=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):null,valgus=lV!=null&&rV!=null?Math.min(lV,rV):(lV??rV??180);return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+function evalSingleFront(kp){const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];if(!ok(kp,hi,ki,ai))return null;return{valgus:calcAngle(kp[hi],kp[ki],kp[ai]),pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+function evalJumpFront(kp){const lv=ok(kp,11,13,15),rv=ok(kp,12,14,16);if(!lv&&!rv)return null;return{lValgus:lv?calcAngle(kp[11],kp[13],kp[15]):180,rValgus:rv?calcAngle(kp[12],kp[14],kp[16]):180,sym:lv&&rv?Math.abs(calcAngle(kp[11],kp[13],kp[15])-calcAngle(kp[12],kp[14],kp[16])):null};}
+function evalCutFront(kp){const lV=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):null,rV=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):null;return{valgus:lV!=null&&rV!=null?Math.min(lV,rV):(lV??rV??180),trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+
+// ── Phase functions ───────────────────────────────────────────────────────────
+const HIST=18;
+function phaseSquat(kp,h){const s=bestSide(kp);if(!s)return'検出中...';const a=calcAngle(s.hip,s.knee,s.ank);h.push(a);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const d=avg(h.slice(-4))-avg(h.slice(0,5));return a>155?'立位':d<-5?'下降中 ↓':d>5?'上昇中 ↑':a<115?'ボトム':'中間位';}
+function phaseLunge(kp,h){const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180,f=Math.min(lK,rK);h.push(f);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const d=avg(h.slice(-4))-avg(h.slice(0,5));return f>155?'立位':d<-5?'踏み込み ↓':d>5?'戻り ↑':f<115?'ボトム':'中間位';}
+function phaseSingleLeg(kp,h){const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];if(!ok(kp,hi,ki,ai))return'検出中...';const a=calcAngle(kp[hi],kp[ki],kp[ai]);h.push(a);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const d=avg(h.slice(-4))-avg(h.slice(0,5));return a>155?(sr?'右':'左')+'片足立ち':d<-5?'下降中 ↓':d>5?'上昇中 ↑':a<115?'ボトム':'中間位';}
+function phaseJump(kp,h){const ay=(kp[15].y+kp[16].y)/2;h.push(ay);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const vel=ay-avg(h.slice(-5,-2)),hipY=(kp[11].y+kp[12].y)/2;if(kp[15].score>.3&&kp[16].score>.3&&kp[15].y<hipY&&kp[16].y<hipY)return'空中 ✈️';if(vel>15)return'⚠️ 着地 (チェック!)';if(avg([calcAngle(kp[11],kp[13],kp[15]),calcAngle(kp[12],kp[14],kp[16])])<140)return'着地吸収中';return'助走 / 立位';}
+function phaseCut(kp,h){const cx=(kp[11].x+kp[12].x)/2;h.push(cx);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const lat=Math.abs(avg(h.slice(-3))-avg(h.slice(0,5))),lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180;return lat>30?'⚠️ 切り返し (チェック!)':Math.min(lK,rK)<140?'接地 屈曲中':'助走';}
+function phaseStop(kp,h){const cy=(kp[11].y+kp[12].y)/2;h.push(cy);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const vel=avg(h.slice(-3))-avg(h.slice(0,5)),s=bestSide(kp),knee=s?calcAngle(s.hip,s.knee,s.ank):180;return vel>15&&knee<150?'⚠️ 制動 (チェック!)':knee<140?'制動中':'助走 / 立位';}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let detector=null,cameraRunning=false,camProcessing=false,camStream=null,facingMode='environment';
+let camView='side',currentMove='squat';
+const vidProc={side:false,front:false};
+const phaseHist={cam:[],side:[],front:[]};
+
+// Tracking: stores min/max of each metric per frame during video playback
+// { metricKey: { min, max, minTime, maxTime } }
+const tracking={side:{},front:{}};
+
+// ── Tracking helpers ──────────────────────────────────────────────────────────
+function updateTracking(view, data, currentTime) {
+  const t = tracking[view];
+  Object.entries(data).forEach(([key, val]) => {
+    if (typeof val !== 'number' || !isFinite(val)) return;
+    if (!t[key]) { t[key] = {min:val, max:val, minTime:currentTime, maxTime:currentTime}; return; }
+    if (val < t[key].min) { t[key].min = val; t[key].minTime = currentTime; }
+    if (val > t[key].max) { t[key].max = val; t[key].maxTime = currentTime; }
+  });
+  // Enable summary button
+  document.getElementById('summaryBtn').disabled = false;
+}
+
+// Return the value with worst clinical grade (min or max, whichever is worse)
+function getWorst(key, t) {
+  if (!t || !MDEFS[key]) return null;
+  const [minCls] = MDEFS[key].grade(t.min);
+  const [maxCls] = MDEFS[key].grade(t.max);
+  return (GRADE_RANK[minCls]||0) >= (GRADE_RANK[maxCls]||0)
+    ? {val:t.min, time:t.minTime, cls:minCls}
+    : {val:t.max, time:t.maxTime, cls:maxCls};
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderMetricsUI();
+(async()=>{
+  try{
+    await tf.setBackend('webgl'); await tf.ready();
+    detector=await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet,{modelType:poseDetection.movenet.modelType.SINGLEPOSE_THUNDER});
+    document.getElementById('loadingOverlay').style.display='none';
+  }catch(e){document.getElementById('loadingText').innerHTML='<span style="color:#e53e3e">読み込み失敗。インターネット接続を確認して再読み込みしてください。</span>';console.error(e);}
+})();
+
+// ── Movement / view selection ─────────────────────────────────────────────────
+function selectMove(move){
+  currentMove=move;
+  document.querySelectorAll('.move-btn').forEach(b=>b.classList.toggle('active',b.dataset.move===move));
+  phaseHist.cam.length=phaseHist.side.length=phaseHist.front.length=0;
+  tracking.side={}; tracking.front={};
+  document.getElementById('summaryBtn').disabled=true;
+  renderMetricsUI(); updateCamTip();
+}
+function setCamView(v){
+  camView=v;
+  document.getElementById('vtbSide').classList.toggle('active',v==='side');
+  document.getElementById('vtbFront').classList.toggle('active',v==='front');
+  phaseHist.cam.length=0; renderMetricsUI(); updateCamTip();
+}
+function updateCamTip(){
+  const m=MOVES[currentMove],isSide=camView==='side';
+  document.getElementById('camViewTag').textContent=isSide?'側面':'正面';
+  document.getElementById('camViewTag').className='view-tag '+(isSide?'vt-side':'vt-front');
+  document.getElementById('camTipText').textContent=isSide?m.sideTip:m.frontTip;
+}
+
+// ── Tab ───────────────────────────────────────────────────────────────────────
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0&&t==='cam')||(i===1&&t==='vid')));
+  document.getElementById('camPanel').classList.toggle('active',t==='cam');
+  document.getElementById('vidPanel').classList.toggle('active',t==='vid');
+  if(t==='vid')stopCamera();
+}
+
+// ── Camera ────────────────────────────────────────────────────────────────────
+async function startCamera(){
+  if(!detector)return alert('モデルがまだ読み込まれていません。');
+  const video=document.getElementById('camVideo'),canvas=document.getElementById('camCanvas');
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode,width:{ideal:720},height:{ideal:1280}},audio:false});
+    video.srcObject=camStream; await video.play();
+    canvas.width=video.videoWidth||720; canvas.height=video.videoHeight||1280;
+    cameraRunning=true;
+    document.getElementById('camStartBtn').disabled=true;
+    document.getElementById('camStopBtn').disabled=false;
+    document.getElementById('camPhase').textContent='検出中...';
+    camLoop();
+  }catch(e){alert('カメラへのアクセスが許可されていません。\niPhoneではHTTPSが必要です。');console.error(e);}
+}
+function stopCamera(){
+  cameraRunning=false; camProcessing=false;
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+  document.getElementById('camStartBtn').disabled=false;
+  document.getElementById('camStopBtn').disabled=true;
+  document.getElementById('camPhase').textContent='停止中';
+}
+async function flipCamera(){facingMode=facingMode==='environment'?'user':'environment';if(cameraRunning){stopCamera();await startCamera();}}
+async function camLoop(){
+  if(!cameraRunning)return;
+  const v=document.getElementById('camVideo'),c=document.getElementById('camCanvas');
+  if(!camProcessing&&v.readyState>=2){camProcessing=true;try{await processFrame(v,c,camView,'cam');}finally{camProcessing=false;}}
+  requestAnimationFrame(camLoop);
+}
+
+// ── Video (dual) ──────────────────────────────────────────────────────────────
+function loadVid(e,view){
+  const file=e.target.files[0]; if(!file)return;
+  const v=document.getElementById(view+'Vid'),c=document.getElementById(view+'Canvas');
+  if(v.src)URL.revokeObjectURL(v.src);
+  tracking[view]={}; // reset tracking for this view
+  v.src=URL.createObjectURL(file); v.load();
+  v.addEventListener('loadedmetadata',()=>{
+    c.width=v.videoWidth; c.height=v.videoHeight;
+    document.getElementById(view+'MiniBar').style.display='flex';
+    document.getElementById(view+'Phase').textContent='▶ 再生してください';
+    updateVidBar(view);
+  },{once:true});
+  v.addEventListener('timeupdate',()=>updateVidBar(view));
+  v.addEventListener('play',()=>{document.getElementById(view+'PlayBtn').innerHTML='&#9646;&#9646;';vidLoop(view);});
+  v.addEventListener('pause',()=>{document.getElementById(view+'PlayBtn').innerHTML='&#9654;';});
+  v.addEventListener('ended',()=>{
+    document.getElementById(view+'PlayBtn').innerHTML='&#9654;';
+    vidProc[view]=false;
+    document.getElementById(view+'Phase').textContent='再生終了';
+    // Auto-show summary prompt if both views have data
+    if(Object.keys(tracking.side).length>0||Object.keys(tracking.front).length>0){
+      document.getElementById('summaryBtn').disabled=false;
+      document.getElementById('summaryBtn').textContent='解析サマリーを表示 📋 ← タップ';
+    }
+  });
+}
+function toggleVid(view){const v=document.getElementById(view+'Vid');v.paused?v.play():v.pause();}
+async function vidLoop(view){
+  const v=document.getElementById(view+'Vid'),c=document.getElementById(view+'Canvas');
+  if(v.paused||v.ended){vidProc[view]=false;return;}
+  if(!vidProc[view]&&v.readyState>=2){vidProc[view]=true;try{await processFrame(v,c,view,view);}finally{vidProc[view]=false;}}
+  requestAnimationFrame(()=>vidLoop(view));
+}
+function stepVid(dir,view){
+  const v=document.getElementById(view+'Vid'); if(!v.src||!v.duration)return;
+  v.pause(); document.getElementById(view+'PlayBtn').innerHTML='&#9654;';
+  v.currentTime=Math.max(0,Math.min(v.duration,v.currentTime+dir*(1/30)));
+  v.addEventListener('seeked',async function f(){
+    v.removeEventListener('seeked',f);
+    await processFrame(v,document.getElementById(view+'Canvas'),view,view);
+    updateVidBar(view);
+  },{once:true});
+}
+function seekVid(e,view){
+  const v=document.getElementById(view+'Vid'); if(!v.duration)return;
+  const r=e.currentTarget.getBoundingClientRect();
+  v.currentTime=((e.clientX-r.left)/r.width)*v.duration;
+}
+function updateVidBar(view){
+  const v=document.getElementById(view+'Vid');
+  document.getElementById(view+'Prog').style.width=(v.duration?(v.currentTime/v.duration*100):0)+'%';
+  document.getElementById(view+'Time').textContent=fmt(v.currentTime);
+}
+
+// ── Core processFrame ─────────────────────────────────────────────────────────
+async function processFrame(src, canvas, view, histKey){
+  const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H); ctx.drawImage(src,0,0,W,H);
+  const poses=await detector.estimatePoses(src,{flipHorizontal:false});
+  const isVid=(histKey!=='cam');
+  const phEl=document.getElementById(isVid?view+'Phase':'camPhase');
+
+  if(!poses.length||!poses[0].keypoints){
+    if(phEl){phEl.textContent='人物を検出できません';phEl.classList.remove('alert');}
+    if(isVid)updateVidMetrics(view,null);else updateCamMetrics(null);
+    return;
+  }
+  const kp=poses[0].keypoints;
+  drawSkeleton(ctx,kp);
+  const m=MOVES[currentMove];
+  const evalFn=view==='side'?m.sideEval:m.frontEval;
+  const data=evalFn(kp);
+  if(!data){
+    if(phEl){phEl.textContent='骨格が見えません';phEl.classList.remove('alert');}
+    if(isVid)updateVidMetrics(view,null);else updateCamMetrics(null);
+    return;
+  }
+  drawArcs(ctx,kp,view,data);
+  const phase=m.phaseFn(kp,phaseHist[histKey]);
+  if(phEl){phEl.textContent=phase;phEl.classList.toggle('alert',phase.includes('⚠️'));}
+  const pvEl=document.getElementById(isVid?'vid-phase-val':'cam-phase-val');
+  if(pvEl)pvEl.textContent=phase;
+
+  if(isVid){
+    // Track data for summary
+    const currentTime=document.getElementById(view+'Vid').currentTime;
+    updateTracking(view, data, currentTime);
+    updateVidMetrics(view,data);
+  } else {
+    updateCamMetrics(data);
+  }
+}
+
+// ── Draw ──────────────────────────────────────────────────────────────────────
+function drawSkeleton(ctx,kp){
+  ctx.lineWidth=3;
+  SKEL.forEach(([i,j])=>{if(kp[i].score>.25&&kp[j].score>.25){ctx.beginPath();ctx.moveTo(kp[i].x,kp[i].y);ctx.lineTo(kp[j].x,kp[j].y);ctx.strokeStyle='rgba(0,255,120,.85)';ctx.stroke();}});
+  kp.forEach(p=>{if(p.score>.25){ctx.beginPath();ctx.arc(p.x,p.y,5,0,2*Math.PI);ctx.fillStyle='#ff4757';ctx.fill();}});
+}
+function drawArc(ctx,p1,p2,p3,deg,color){
+  const r=28,a1=Math.atan2(p1.y-p2.y,p1.x-p2.x),a2=Math.atan2(p3.y-p2.y,p3.x-p2.x);
+  ctx.beginPath();ctx.arc(p2.x,p2.y,r,Math.min(a1,a2),Math.max(a1,a2));ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.stroke();
+  const mid=(a1+a2)/2;ctx.fillStyle=color;ctx.font='bold 14px sans-serif';ctx.shadowColor='#000';ctx.shadowBlur=4;
+  ctx.fillText(`${Math.round(deg)}°`,p2.x+(r+6)*Math.cos(mid),p2.y+(r+6)*Math.sin(mid));ctx.shadowBlur=0;
+}
+function drawArcs(ctx,kp,view,data){
+  if(view==='side'){const s=bestSide(kp);if(s&&data.knee!=null)drawArc(ctx,s.hip,s.knee,s.ank,data.knee,'#ffd700');}
+  else{
+    if(data.lValgus!=null&&ok(kp,11,13,15))drawArc(ctx,kp[11],kp[13],kp[15],data.lValgus,'#ff6b81');
+    if(data.rValgus!=null&&ok(kp,12,14,16))drawArc(ctx,kp[12],kp[14],kp[16],data.rValgus,'#ffd700');
+    if(data.valgus!=null&&data.lValgus==null){const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];if(ok(kp,hi,ki,ai))drawArc(ctx,kp[hi],kp[ki],kp[ai],data.valgus,'#ff6b81');}
+  }
+}
+
+// ── Metrics UI ────────────────────────────────────────────────────────────────
+function renderMetricsUI(){renderCamMetrics();renderVidMetrics();}
+function renderCamMetrics(){
+  const m=MOVES[currentMove],keys=camView==='side'?m.sideKeys:m.frontKeys;
+  document.getElementById('camMetrics').innerHTML=
+    keys.map((k,i)=>`<div class="card${keys.length%2!==0&&i===keys.length-1?' wide':''}">
+      <div class="card-label">${MDEFS[k].label}</div>
+      <div class="card-val" id="cm-${k}-v">--</div>
+      <div class="badge na" id="cm-${k}-b">待機中</div>
+    </div>`).join('')+
+    `<div class="card wide"><div class="card-label">フェーズ / 状態</div>
+    <div style="font-size:18px;font-weight:700;color:#2b6cb0;margin-top:4px" id="cam-phase-val">--</div></div>`;
+}
+function renderVidMetrics(){
+  const m=MOVES[currentMove];
+  const mkCards=(keys,pfx)=>keys.map((k,i)=>`<div class="card${keys.length%2!==0&&i===keys.length-1?' wide':''}">
+    <div class="card-label">${MDEFS[k].label}</div>
+    <div class="card-val" id="${pfx}-${k}-v">--</div>
+    <div class="badge na" id="${pfx}-${k}-b">未解析</div>
+  </div>`).join('');
+  document.getElementById('vidMetrics').innerHTML=
+    `<div class="sec-label">▍ 側面解析</div>`+mkCards(m.sideKeys,'vs')+
+    `<div class="sec-label">▍ 正面解析</div>`+mkCards(m.frontKeys,'vf')+
+    `<div class="card wide"><div class="card-label">フェーズ / 状態</div>
+    <div style="font-size:18px;font-weight:700;color:#2b6cb0;margin-top:4px" id="vid-phase-val">--</div></div>`;
+}
+function setCard(id,val,key){
+  const v=document.getElementById(id+'-v'),b=document.getElementById(id+'-b');if(!v||!b)return;
+  if(val==null){v.innerHTML='--';b.className='badge na';b.textContent='未解析';return;}
+  v.innerHTML=MDEFS[key].fmt(val);const[cls,txt]=MDEFS[key].grade(val);b.className=`badge ${cls}`;b.textContent=txt;
+}
+function updateCamMetrics(data){MOVES[currentMove][camView==='side'?'sideKeys':'frontKeys'].forEach(k=>setCard(`cm-${k}`,data?.[k]??null,k));}
+function updateVidMetrics(view,data){const pfx=view==='side'?'vs':'vf';MOVES[currentMove][view==='side'?'sideKeys':'frontKeys'].forEach(k=>setCard(`${pfx}-${k}`,data?.[k]??null,k));}
+
+// ── Jump to specific frame ─────────────────────────────────────────────────────
+function jumpToFrame(view, time){
+  const v=document.getElementById(view+'Vid'); if(!v.src||!v.duration)return;
+  closeSummary();
+  v.pause(); document.getElementById(view+'PlayBtn').innerHTML='&#9654;';
+  v.currentTime=time;
+  v.addEventListener('seeked',async function f(){
+    v.removeEventListener('seeked',f);
+    await processFrame(v,document.getElementById(view+'Canvas'),view,view);
+    updateVidBar(view);
+  },{once:true});
+}
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+function showSummary(){
+  const m=MOVES[currentMove];
+  let html='';
+  let worstGrade='ok';
+
+  // ── Peak values per view ──
+  ['side','front'].forEach(view=>{
+    const t=tracking[view];
+    if(!Object.keys(t).length)return;
+    const keys=view==='side'?m.sideKeys:m.frontKeys;
+    html+=`<div class="sec-label" style="margin-bottom:8px">▍ ${view==='side'?'側面':'正面'}解析 ピーク値</div>`;
+    keys.forEach(key=>{
+      if(key==='hip')return; // boolean, skip
+      const w=getWorst(key,t[key]);
+      if(!w)return;
+      if((GRADE_RANK[w.cls]||0)>(GRADE_RANK[worstGrade]||0))worstGrade=w.cls;
+      html+=`<div class="peak-row">
+        <div class="peak-info">
+          <div class="card-label">${MDEFS[key].label}</div>
+          <div class="card-val">${MDEFS[key].fmt(w.val)}</div>
+          <span class="badge ${w.cls}">${MDEFS[key].grade(w.val)[1]}</span>
+        </div>
+        <button class="jump-btn" onclick="jumpToFrame('${view}',${w.time.toFixed(2)})">▶ ${fmt(w.time)}</button>
+      </div>`;
+    });
+  });
+
+  // ── Clinical comments ──
+  const comments=generateComments();
+  if(comments.length){
+    html+=`<div class="sec-label" style="margin:14px 0 8px">▍ 評価コメント</div>`;
+    comments.forEach(c=>{
+      if((GRADE_RANK[c.level]||0)>(GRADE_RANK[worstGrade]||0))worstGrade=c.level;
+      html+=`<div class="comment-card ${c.level}">
+        <div class="comment-title">${c.level==='ng'?'⛔':'⚠️'} ${c.title}</div>
+        <div class="comment-text">${c.text}</div>
+      </div>`;
+    });
+    // Add OK items
+    const okComments=generateOkComments();
+    okComments.forEach(c=>{
+      html+=`<div class="comment-card ok">
+        <div class="comment-title">✅ ${c.title}</div>
+        <div class="comment-text">${c.text}</div>
+      </div>`;
+    });
+  }
+
+  // ── Overall box (prepend) ──
+  const overallMap={ok:{icon:'✅',label:'問題なし'},warn:{icon:'⚠️',label:'要経過観察'},ng:{icon:'⛔',label:'要注意 / 介入推奨'}};
+  const ov=overallMap[worstGrade]||overallMap.ok;
+  html=`<div class="overall-box ${worstGrade}">
+    <div class="overall-icon">${ov.icon}</div>
+    <div class="overall-label">${m.label} — ${ov.label}</div>
+  </div>`+html;
+
+  document.getElementById('summaryTitle').textContent=`解析サマリー: ${m.label}`;
+  document.getElementById('summaryBody').innerHTML=html;
+  document.getElementById('summaryModal').style.display='flex';
+  document.getElementById('summaryBtn').textContent='解析サマリーを表示 📋';
+}
+function closeSummary(){document.getElementById('summaryModal').style.display='none';}
+
+// ── Clinical comment generation ───────────────────────────────────────────────
+function generateComments(){
+  const comments=[];
+  const ts=tracking.side, tfront=tracking.front;
+
+  // 膝外反
+  const vKey=tfront.valgus||tfront.lValgus;
+  if(vKey){
+    const minV=Math.min(tfront.valgus?.min??180, tfront.lValgus?.min??180, tfront.rValgus?.min??180);
+    const t=tfront.valgus?.minTime??tfront.lValgus?.minTime;
+    if(minV<150) comments.push({level:'ng',title:'膝外反（ニーイン）— 高リスク',text:`最大外反角度 ${Math.round(180-minV)}° のニーインが確認されました（FPPA最小値 ${Math.round(minV)}°）。ACL損傷の高リスクパターンです。股関節外転・外旋筋群（中殿筋・深層外旋6筋）の強化と着地フォームの根本的な修正が必要です。`});
+    else if(minV<160) comments.push({level:'ng',title:'膝外反（ニーイン）',text:`中等度の膝外反が確認されました（FPPA最小値 ${Math.round(minV)}°）。ACL損傷リスクがあります。股関節外転・外旋筋の強化と動作再教育を推奨します。`});
+    else if(minV<170) comments.push({level:'warn',title:'軽度の膝外反',text:`軽度のニーインが見られます（FPPA最小値 ${Math.round(minV)}°）。予防的な筋力強化と動作指導を推奨します。`});
+  }
+
+  // 体幹前傾
+  if(ts.trunk){
+    const maxT=ts.trunk.max;
+    if(maxT>55) comments.push({level:'ng',title:'体幹前傾過大',text:`最大体幹前傾角 ${Math.round(maxT)}°。股関節屈筋の短縮または体幹安定筋の筋力不足が疑われます。コアスタビリティトレーニングおよびヒップフレクサーストレッチを推奨します。`});
+    else if(maxT>40) comments.push({level:'warn',title:'体幹前傾',text:`やや前傾が大きいです（最大 ${Math.round(maxT)}°）。体幹安定性の強化を推奨します。`});
+  }
+
+  // 骨盤下制
+  if(tfront.pelvicDrop){
+    const maxD=tfront.pelvicDrop.max;
+    if(maxD>12) comments.push({level:'ng',title:'Trendelenburg徴候陽性疑い',text:`最大骨盤下制 ${Math.round(maxD)}°。中殿筋の著明な筋力低下が疑われます。クラムシェル・サイドライイングアブダクションなど中殿筋強化の優先的な実施を推奨します。`});
+    else if(maxD>5) comments.push({level:'warn',title:'軽度の骨盤下制',text:`骨盤下制が確認されました（最大 ${Math.round(maxD)}°）。中殿筋の筋力強化を推奨します。`});
+  }
+
+  // ジャンプ着地時の膝屈曲（スティフランディング）
+  if(currentMove==='jump'&&ts.knee){
+    const minK=ts.knee.min;
+    if(minK>150) comments.push({level:'ng',title:'スティフランディング（硬直着地）',text:`着地時の最大膝屈曲が ${Math.round(minK)}° と不十分です。衝撃が関節に直接伝わりACL・半月板損傷リスクが高まります。ソフトランディング（膝を深く曲げた着地）のトレーニングを推奨します。`});
+    else if(minK>120) comments.push({level:'warn',title:'着地時膝屈曲がやや不十分',text:`着地時の膝屈曲が浅めです（最小 ${Math.round(minK)}°）。より膝を曲げて衝撃を吸収する着地練習を推奨します。`});
+  }
+
+  // 左右対称性
+  const symData=ts.sym||tfront.sym;
+  if(symData){
+    const maxS=symData.max;
+    if(maxS>18) comments.push({level:'ng',title:'左右非対称（大）',text:`膝屈曲角度の左右差が最大 ${Math.round(maxS)}° あります。患側・健側の非対称な動作パターンは再受傷リスクに繋がります。患側の機能回復と動作再教育を優先してください。`});
+    else if(maxS>8) comments.push({level:'warn',title:'左右差あり',text:`左右の膝屈曲角度に差が見られます（最大 ${Math.round(maxS)}°）。均等な荷重・動作パターンを意識した練習を推奨します。`});
+  }
+
+  // 体幹側方傾斜
+  if(tfront.trunkLat){
+    const maxL=tfront.trunkLat.max;
+    if(maxL>15) comments.push({level:'ng',title:'体幹側方傾斜過大',text:`体幹の側方傾斜が最大 ${Math.round(maxL)}°。股関節外転筋の筋力不足や体幹安定性の低下が考えられます。`});
+    else if(maxL>8) comments.push({level:'warn',title:'体幹側方傾斜',text:`やや体幹の側方傾斜が見られます（最大 ${Math.round(maxL)}°）。体幹・股関節周囲の安定性強化を推奨します。`});
+  }
+
+  return comments;
+}
+
+function generateOkComments(){
+  const ok=[];
+  const ts=tracking.side, tfront=tracking.front;
+  if(tfront.valgus&&tfront.valgus.min>170) ok.push({title:'膝外反',text:'動作全体を通じて膝外反は認められませんでした。良好な動作パターンです。'});
+  if(ts.trunk&&ts.trunk.max<35) ok.push({title:'体幹前傾',text:'体幹前傾角は動作全体を通じて良好な範囲内でした。'});
+  if(currentMove==='jump'&&ts.knee&&ts.knee.min<100) ok.push({title:'着地衝撃吸収',text:`着地時の膝屈曲が十分で（最小 ${Math.round(ts.knee.min)}°）、良好な衝撃吸収パターンが確認されました。`});
+  return ok;
+}
+</script>
+</body>
+</html>
