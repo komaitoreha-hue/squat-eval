@@ -300,11 +300,12 @@ function calcAngle(a,b,c){const v1x=a.x-b.x,v1y=a.y-b.y,v2x=c.x-b.x,v2y=c.y-b.y,
 //   人の左脚(isRightLeg=false) → 画像右側(x大)。外反=膝が内側=左へ移動=lineXより小
 function calcFPPA(hip,knee,ank,isRightLeg){
   const angle=calcAngle(hip,knee,ank);
+  // 膝角度が100°未満はランドマーク崩壊とみなす（正常な膝はFPPAで100°以下にならない）
+  if(angle<100)return null;
   if(Math.abs(ank.y-hip.y)<5)return angle;
   const lineX=hip.x+(ank.x-hip.x)*(knee.y-hip.y)/(ank.y-hip.y);
   const isValgus=isRightLeg?(knee.x>lineX):(knee.x<lineX);
   const fppa=isValgus?angle:360-angle;
-  // 解剖学的にありえない値（ランドマーク検出失敗）は null を返す
   if(fppa<100||fppa>260)return null;
   return fppa;
 }
@@ -815,10 +816,11 @@ function drawArcs(ctx,kp,view,data){
     const showValgus=!key||key==='valgus'||key==='lValgus'||key==='rValgus';
     const showPelvic=!key||key==='pelvicDrop'||key==='pelvic';
     const showTrunkLat=!key||key==='trunkLat';
+    const validFPPA=v=>v!=null&&v>=100&&v<=260;
     if(showValgus){
-      if(data.lValgus!=null&&ok(kp,11,13,15)){drawArc(ctx,kp[11],kp[13],kp[15],'#ff6b81');labels.push({text:`左膝 ${Math.round(data.lValgus)}°`,color:'#ff6b81'});}
-      if(data.rValgus!=null&&ok(kp,12,14,16)){drawArc(ctx,kp[12],kp[14],kp[16],'#ffd700');labels.push({text:`右膝 ${Math.round(data.rValgus)}°`,color:'#ffd700'});}
-      if(data.valgus!=null&&data.lValgus==null){
+      if(validFPPA(data.lValgus)&&ok(kp,11,13,15)){drawArc(ctx,kp[11],kp[13],kp[15],'#ff6b81');labels.push({text:`左膝 ${Math.round(data.lValgus)}°`,color:'#ff6b81'});}
+      if(validFPPA(data.rValgus)&&ok(kp,12,14,16)){drawArc(ctx,kp[12],kp[14],kp[16],'#ffd700');labels.push({text:`右膝 ${Math.round(data.rValgus)}°`,color:'#ffd700'});}
+      if(validFPPA(data.valgus)&&data.lValgus==null){
         const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];
         if(ok(kp,hi,ki,ai)){drawArc(ctx,kp[hi],kp[ki],kp[ai],'#ff6b81');labels.push({text:`膝 ${Math.round(data.valgus)}°`,color:'#ff6b81'});}
       }
