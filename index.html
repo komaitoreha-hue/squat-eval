@@ -261,7 +261,7 @@ const GRADE_RANK={ng:3,warn:2,ok:1,na:0};
 // ── Movement configs ──────────────────────────────────────────────────────────
 const MOVES={
   squat:     {label:'スクワット',   sideTip:'全身が映るよう側面から（1.5〜2m）。',          frontTip:'全身が映るよう正面から（1.5〜2m）。',            sideKeys:['knee','trunk','hip','sym'],             frontKeys:['valgus','pelvicDrop'],            sideEval:evalGenericSide, frontEval:evalGenericFront, phaseFn:phaseSquat},
-  lunge:     {label:'ランジ',       sideTip:'側面から。前後の足が両方映るよう調整。',         frontTip:'正面から。前膝外反・骨盤安定性を確認。',           sideKeys:['frontKnee','rearKnee','trunk','pelvic'],  frontKeys:['valgus','pelvicDrop','trunkLat'], sideEval:evalLungeSide,   frontEval:evalGenericFront, phaseFn:phaseLunge},
+  lunge:     {label:'ランジ',       sideTip:'側面から。前後の足が両方映るよう調整。',         frontTip:'正面から。前膝外反・骨盤安定性を確認。',           sideKeys:['frontKnee','rearKnee','trunk','pelvic'],  frontKeys:['valgus','pelvicDrop','trunkLat'], sideEval:evalLungeSide,   frontEval:evalLungeFront, phaseFn:phaseLunge},
   singleLeg: {label:'片足SQ',       sideTip:'側面から全身が映るよう撮影。',                   frontTip:'正面から。ニーイン・骨盤下制を確認（最重要）。',   sideKeys:['knee','trunk'],                          frontKeys:['valgus','pelvicDrop','trunkLat'], sideEval:evalGenericSide, frontEval:evalSingleFront,  phaseFn:phaseSingleLeg},
   jump:      {label:'ジャンプ着地', sideTip:'側面から。着地時の膝屈曲・体幹を確認。',        frontTip:'正面から。着地時の両膝外反を確認（最重要）。',     sideKeys:['knee','trunk'],                          frontKeys:['lValgus','rValgus','sym'],        sideEval:evalGenericSide, frontEval:evalJumpFront,    phaseFn:phaseJump},
   cut:       {label:'切り返し',     sideTip:'側面から。接地時の膝屈曲・体幹前傾を確認。',    frontTip:'正面から。切り返し時のニーインを確認（最重要）。', sideKeys:['knee','trunk'],                          frontKeys:['valgus','trunkLat'],              sideEval:evalGenericSide, frontEval:evalCutFront,     phaseFn:phaseCut},
@@ -312,6 +312,25 @@ function evalGenericFront(kp){const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp
 function evalSingleFront(kp){const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];if(!ok(kp,hi,ki,ai))return null;return{valgus:calcFPPA(kp[hi],kp[ki],kp[ai],sr),pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
 function evalJumpFront(kp){const lv=ok(kp,11,13,15),rv=ok(kp,12,14,16);if(!lv&&!rv)return null;const lVal=lv?calcFPPA(kp[11],kp[13],kp[15],false):180,rVal=rv?calcFPPA(kp[12],kp[14],kp[16],true):180;return{lValgus:lVal,rValgus:rVal,sym:lv&&rv?Math.abs(lVal-rVal):null};}
 function evalCutFront(kp){const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null,rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null;return{valgus:lV!=null&&rV!=null?Math.min(lV,rV):(lV??rV??180),trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+// ランジ専用: 後脚の膝は床に近く正面からFPPAが不正確なため、前脚のみ評価
+function evalLungeFront(kp){
+  const lOk=ok(kp,11,13,15),rOk=ok(kp,12,14,16);
+  if(!lOk&&!rOk)return{valgus:180,pelvicDrop:0,trunkLat:0};
+  const lFPPA=lOk?calcFPPA(kp[11],kp[13],kp[15],false):null;
+  const rFPPA=rOk?calcFPPA(kp[12],kp[14],kp[16],true):null;
+  if(!lOk)return{valgus:rFPPA,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
+  if(!rOk)return{valgus:lFPPA,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
+  // 前脚の特定: 後脚の膝は床に近い（画面下方=y大）
+  // 脚長を基準に閾値を正規化
+  const legLen=Math.max(Math.abs(kp[11].y-kp[15].y),Math.abs(kp[12].y-kp[16].y),100);
+  const thresh=legLen*0.12;
+  const yDiff=kp[14].y-kp[13].y; // 右膝y - 左膝y
+  let valgus;
+  if(yDiff>thresh)      valgus=lFPPA;              // 右膝が低い=右が後脚=左が前脚
+  else if(yDiff<-thresh) valgus=rFPPA;             // 左膝が低い=左が後脚=右が前脚
+  else                   valgus=Math.min(lFPPA,rFPPA); // 判定困難=悪い方
+  return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
+}
 
 // ── Phase functions ───────────────────────────────────────────────────────────
 const HIST=18;
