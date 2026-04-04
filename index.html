@@ -667,7 +667,7 @@ function toggleVid(view){const v=document.getElementById(view+'Vid');v.paused?v.
 async function vidLoop(view){
   const v=document.getElementById(view+'Vid'),c=document.getElementById(view+'Canvas');
   if(v.paused||v.ended){vidProc[view]=false;return;}
-  if(!vidProc[view]&&v.readyState>=2){vidProc[view]=true;try{await processFrame(v,c,view,view);}finally{vidProc[view]=false;}}
+  if(!vidProc[view]&&v.readyState>=2){vidProc[view]=true;try{await processFrame(v,c,view,view,true);}finally{vidProc[view]=false;}}
   requestAnimationFrame(()=>vidLoop(view));
 }
 function stepVid(dir,view){
@@ -692,7 +692,7 @@ function updateVidBar(view){
 }
 
 // ── Core processFrame ─────────────────────────────────────────────────────────
-async function processFrame(src, canvas, view, histKey){
+async function processFrame(src, canvas, view, histKey, doTrack=false){
   const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
   if(W>0) lastCanvasW=W;
   ctx.clearRect(0,0,W,H); ctx.drawImage(src,0,0,W,H);
@@ -722,19 +722,23 @@ async function processFrame(src, canvas, view, histKey){
   if(pvEl)pvEl.textContent=phase;
 
   if(isVid){
-    // Track data for summary
     const currentTime=document.getElementById(view+'Vid').currentTime;
-    // ランジ: 前脚ボトム時のFPPAを記録
-    if(currentMove==='lunge'&&view==='front'&&typeof data.frontKneeY==='number'){
-      const fky=data.frontKneeY;
-      delete data.frontKneeY; // 汎用trackerには渡さない
-      const tb=tracking[view];
-      if(!tb._bottom||fky>tb._bottom.kneeY){
-        tb._bottom={kneeY:fky,valgus:data.valgus,time:currentTime,
-          img:canvas?captureThumb(canvas):null};
+    if(doTrack){
+      // ランジ: 前脚ボトム時のFPPAを記録
+      if(currentMove==='lunge'&&view==='front'&&typeof data.frontKneeY==='number'){
+        const fky=data.frontKneeY;
+        delete data.frontKneeY;
+        const tb=tracking[view];
+        if(!tb._bottom||fky>tb._bottom.kneeY){
+          tb._bottom={kneeY:fky,valgus:data.valgus,time:currentTime,
+            img:canvas?captureThumb(canvas):null};
+        }
       }
+      updateTracking(view, data, currentTime, canvas);
+    } else {
+      // シーク時はfrontKneeYだけ削除してデータ汚染を防ぐ
+      delete data.frontKneeY;
     }
-    updateTracking(view, data, currentTime, canvas);
     updateVidMetrics(view,data);
     syncLightboxCanvas();
   } else {
