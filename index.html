@@ -271,9 +271,9 @@ const MDEFS={
   trunk:     {label:'体幹前傾角',   fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v<35?['ok','良好']:v<52?['warn','前傾注意']:['ng','前傾過大']},
   hip:       {label:'股関節深さ',   fmt:v=>`<span style="font-size:20px">${v?'✅':'⚠️'}</span>`, grade:v=> v?['ok','膝以下']:['warn','膝以上']},
   sym:       {label:'左右対称性',   fmt:v=> v==null?'--':`${Math.round(v)}<span class="unit"> °差</span>`, grade:v=> v==null?['na','検出不可']:v<8?['ok','対称良好']:v<18?['warn','左右差あり']:['ng','左右差大']},
-  valgus:    {label:'膝外反 FPPA',  fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>170?['ok','外反なし']:v>160?['warn','軽度外反']:['ng','⚡ ACLリスク']},
-  lValgus:   {label:'左膝 外反',    fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>170?['ok','良好']:v>160?['warn','軽度外反']:['ng','ACLリスク']},
-  rValgus:   {label:'右膝 外反',    fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>170?['ok','良好']:v>160?['warn','軽度外反']:['ng','ACLリスク']},
+  valgus:    {label:'膝外反 FPPA',  fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>185?['ok','内反傾向']:v>170?['ok','外反なし']:v>160?['warn','軽度外反']:['ng','⚡ ACLリスク']},
+  lValgus:   {label:'左膝 外反',    fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>185?['ok','内反傾向']:v>170?['ok','良好']:v>160?['warn','軽度外反']:['ng','ACLリスク']},
+  rValgus:   {label:'右膝 外反',    fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>185?['ok','内反傾向']:v>170?['ok','良好']:v>160?['warn','軽度外反']:['ng','ACLリスク']},
   pelvicDrop:{label:'骨盤下制',     fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v<5?['ok','安定']:v<12?['warn','軽度下制']:['ng','Trend陽性疑']},
   trunkLat:  {label:'体幹側方傾斜', fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v<8?['ok','良好']:v<15?['warn','傾き注意']:['ng','過大']},
   frontKnee: {label:'前脚 膝角度',  fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>145?['na','立位']:v>120?['warn','やや浅い']:v>=60?['ok','良好']:['warn','深すぎ']},
@@ -283,6 +283,17 @@ const MDEFS={
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function calcAngle(a,b,c){const v1x=a.x-b.x,v1y=a.y-b.y,v2x=c.x-b.x,v2y=c.y-b.y,dot=v1x*v2x+v1y*v2y,mag=Math.sqrt((v1x*v1x+v1y*v1y)*(v2x*v2x+v2y*v2y));return mag<1?0:Math.acos(Math.max(-1,Math.min(1,dot/mag)))*180/Math.PI;}
+// 符号付きFPPA: 外反(ニーイン)<180°、内反(ニーアウト)>180°
+// isRightLeg=true: 右脚(画面右側)  isRightLeg=false: 左脚(画面左側)
+function calcFPPA(hip,knee,ank,isRightLeg){
+  const angle=calcAngle(hip,knee,ank);
+  if(Math.abs(ank.y-hip.y)<5)return angle;
+  // 股関節-足首ラインの膝高さでのX座標
+  const lineX=hip.x+(ank.x-hip.x)*(knee.y-hip.y)/(ank.y-hip.y);
+  // 外反: 右脚→膝が内側(左)=lineXより小、左脚→膝が内側(右)=lineXより大
+  const isValgus=isRightLeg?(knee.x<lineX):(knee.x>lineX);
+  return isValgus?angle:360-angle;
+}
 function ok(kp,...ii){return ii.every(i=>kp[i]&&kp[i].score>.3);}
 function avg(a){return a.reduce((s,v)=>s+v,0)/a.length;}
 function fwdLean(sh,hip){return Math.abs(Math.atan2(Math.abs(sh.x-hip.x),Math.abs(sh.y-hip.y))*180/Math.PI);}
@@ -294,10 +305,10 @@ function fmt(s){if(!isFinite(s))return'0:00';return`${Math.floor(s/60)}:${String
 // ── Eval functions ────────────────────────────────────────────────────────────
 function evalGenericSide(kp){const s=bestSide(kp);if(!s)return null;const knee=calcAngle(s.hip,s.knee,s.ank),trunk=fwdLean(s.sh,s.hip),hip=s.hip.y>s.knee.y,lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):null,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):null;return{knee,trunk,hip,sym:lK!=null&&rK!=null?Math.abs(lK-rK):null};}
 function evalLungeSide(kp){if(!ok(kp,11,13,15)&&!ok(kp,12,14,16))return null;const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180,s=bestSide(kp);return{frontKnee:Math.min(lK,rK),rearKnee:Math.max(lK,rK),trunk:s?fwdLean(s.sh,s.hip):0,pelvic:ok(kp,11,12)?pelvTilt(kp):0};}
-function evalGenericFront(kp){const lV=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):null,rV=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):null,valgus=lV!=null&&rV!=null?Math.min(lV,rV):(lV??rV??180);return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
-function evalSingleFront(kp){const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];if(!ok(kp,hi,ki,ai))return null;return{valgus:calcAngle(kp[hi],kp[ki],kp[ai]),pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
-function evalJumpFront(kp){const lv=ok(kp,11,13,15),rv=ok(kp,12,14,16);if(!lv&&!rv)return null;return{lValgus:lv?calcAngle(kp[11],kp[13],kp[15]):180,rValgus:rv?calcAngle(kp[12],kp[14],kp[16]):180,sym:lv&&rv?Math.abs(calcAngle(kp[11],kp[13],kp[15])-calcAngle(kp[12],kp[14],kp[16])):null};}
-function evalCutFront(kp){const lV=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):null,rV=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):null;return{valgus:lV!=null&&rV!=null?Math.min(lV,rV):(lV??rV??180),trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+function evalGenericFront(kp){const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null,rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null,valgus=lV!=null&&rV!=null?Math.min(lV,rV):(lV??rV??180);return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+function evalSingleFront(kp){const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];if(!ok(kp,hi,ki,ai))return null;return{valgus:calcFPPA(kp[hi],kp[ki],kp[ai],sr),pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+function evalJumpFront(kp){const lv=ok(kp,11,13,15),rv=ok(kp,12,14,16);if(!lv&&!rv)return null;const lVal=lv?calcFPPA(kp[11],kp[13],kp[15],false):180,rVal=rv?calcFPPA(kp[12],kp[14],kp[16],true):180;return{lValgus:lVal,rValgus:rVal,sym:lv&&rv?Math.abs(lVal-rVal):null};}
+function evalCutFront(kp){const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null,rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null;return{valgus:lV!=null&&rV!=null?Math.min(lV,rV):(lV??rV??180),trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
 
 // ── Phase functions ───────────────────────────────────────────────────────────
 const HIST=18;
