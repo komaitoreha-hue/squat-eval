@@ -325,11 +325,11 @@ function evalLungeFront(kp){
   const legLen=Math.max(Math.abs(kp[11].y-kp[15].y),Math.abs(kp[12].y-kp[16].y),100);
   const thresh=legLen*0.12;
   const yDiff=kp[14].y-kp[13].y; // 右膝y - 左膝y
-  let valgus;
-  if(yDiff>thresh)      valgus=lFPPA;              // 右膝が低い=右が後脚=左が前脚
-  else if(yDiff<-thresh) valgus=rFPPA;             // 左膝が低い=左が後脚=右が前脚
-  else                   valgus=Math.min(lFPPA,rFPPA); // 判定困難=悪い方
-  return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
+  let valgus, frontKneeY;
+  if(yDiff>thresh){      valgus=lFPPA; frontKneeY=kp[13].y; } // 左が前脚
+  else if(yDiff<-thresh){ valgus=rFPPA; frontKneeY=kp[14].y; } // 右が前脚
+  else                  { valgus=Math.min(lFPPA,rFPPA); frontKneeY=Math.max(kp[13].y,kp[14].y); }
+  return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,frontKneeY};
 }
 
 // ── Phase functions ───────────────────────────────────────────────────────────
@@ -662,6 +662,16 @@ async function processFrame(src, canvas, view, histKey){
   if(isVid){
     // Track data for summary
     const currentTime=document.getElementById(view+'Vid').currentTime;
+    // ランジ: 前脚ボトム時のFPPAを記録
+    if(currentMove==='lunge'&&view==='front'&&typeof data.frontKneeY==='number'){
+      const fky=data.frontKneeY;
+      delete data.frontKneeY; // 汎用trackerには渡さない
+      const tb=tracking[view];
+      if(!tb._bottom||fky>tb._bottom.kneeY){
+        tb._bottom={kneeY:fky,valgus:data.valgus,time:currentTime,
+          img:canvas?captureThumb(canvas):null};
+      }
+    }
     updateTracking(view, data, currentTime, canvas);
     updateVidMetrics(view,data);
     syncLightboxCanvas();
@@ -749,6 +759,33 @@ function showSummary(){
     html+=`<div class="sec-label" style="margin-bottom:8px">▍ ${view==='side'?'側面':'正面'}解析 ピーク値</div>`;
     keys.forEach(key=>{
       if(key==='hip')return; // boolean, skip
+      // ランジ正面の膝外反はボトム時の値を使用
+      if(currentMove==='lunge'&&view==='front'&&key==='valgus'){
+        const b=t._bottom; if(!b)return;
+        const [cls,lbl]=MDEFS.valgus.grade(b.valgus);
+        if((GRADE_RANK[cls]||0)>(GRADE_RANK[worstGrade]||0))worstGrade=cls;
+        const bc=cls==='ng'?'#e53e3e':cls==='warn'?'#d69e2e':'#38a169';
+        html+=`<div class="peak-row">
+          <div class="peak-info">
+            <div class="card-label">前脚 膝外反 FPPA（ボトム時）</div>
+            <div class="card-val">${MDEFS.valgus.fmt(b.valgus)}</div>
+            <span class="badge ${cls}">${lbl}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;margin-left:8px">
+            ${b.img?`<img src="${b.img}" class="peak-thumb" style="border:2px solid ${bc}" onclick="openLightbox(this.src)">`:``}
+            <div class="step-group">
+              <button class="jump-btn" onclick="stepFromSummary('front',${b.time.toFixed(2)},-1)">◄</button>
+              <button class="jump-btn" onclick="jumpToFrame('front',${b.time.toFixed(2)})">▶ ${fmt(b.time)}</button>
+              <button class="jump-btn" onclick="stepFromSummary('front',${b.time.toFixed(2)},1)">►</button>
+            </div>
+          </div>
+        </div>`;
+        if(t[key]?.series?.length>=2){
+          html+=`<div class="chart-wrap"><div class="chart-label">前脚 膝外反 FPPA — 時系列 <span style="font-weight:400;color:#a0aec0">（タップでジャンプ）</span></div>
+          <canvas class="chart-cv" data-chart data-view="${view}" data-key="${key}"></canvas></div>`;
+        }
+        return;
+      }
       const w=getWorst(key,t[key]);
       if(!w)return;
       if((GRADE_RANK[w.cls]||0)>(GRADE_RANK[worstGrade]||0))worstGrade=w.cls;
@@ -768,7 +805,6 @@ function showSummary(){
           </div>
         </div>
       </div>`;
-      // グラフ
       if(t[key]?.series?.length>=2){
         html+=`<div class="chart-wrap">
           <div class="chart-label">${MDEFS[key].label} — 時系列 <span style="font-weight:400;color:#a0aec0">（タップでジャンプ）</span></div>
@@ -905,7 +941,10 @@ function generateComments(){
   // 膝外反
   const vKey=tfront.valgus||tfront.lValgus;
   if(vKey){
-    const minV=Math.min(tfront.valgus?.min??180, tfront.lValgus?.min??180, tfront.rValgus?.min??180);
+    // ランジはボトム時のFPPAを使用、それ以外は動画全体の最悪値
+    const minV=currentMove==='lunge'&&tfront._bottom
+      ? tfront._bottom.valgus
+      : Math.min(tfront.valgus?.min??180, tfront.lValgus?.min??180, tfront.rValgus?.min??180);
     const t=tfront.valgus?.minTime??tfront.lValgus?.minTime;
     if(minV<150) comments.push({level:'ng',title:'膝外反（ニーイン）— 高リスク',text:`最大外反角度 ${Math.round(180-minV)}° のニーインが確認されました（FPPA最小値 ${Math.round(minV)}°）。ACL損傷の高リスクパターンです。股関節外転・外旋筋群（中殿筋・深層外旋6筋）の強化と着地フォームの根本的な修正が必要です。`});
     else if(minV<160) comments.push({level:'ng',title:'膝外反（ニーイン）',text:`中等度の膝外反が確認されました（FPPA最小値 ${Math.round(minV)}°）。ACL損傷リスクがあります。股関節外転・外旋筋の強化と動作再教育を推奨します。`});
