@@ -315,13 +315,23 @@ const HIST=18;
 function phaseSquat(kp,h){const s=bestSide(kp);if(!s)return'検出中...';const a=calcAngle(s.hip,s.knee,s.ank);h.push(a);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const d=avg(h.slice(-4))-avg(h.slice(0,5));return a>155?'立位':d<-5?'下降中 ↓':d>5?'上昇中 ↑':a<115?'ボトム':'中間位';}
 function phaseLunge(kp,h){const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180,f=Math.min(lK,rK);h.push(f);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const d=avg(h.slice(-4))-avg(h.slice(0,5));return f>155?'立位':d<-5?'踏み込み ↓':d>5?'戻り ↑':f<115?'ボトム':'中間位';}
 function phaseSingleLeg(kp,h){const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];if(!ok(kp,hi,ki,ai))return'検出中...';const a=calcAngle(kp[hi],kp[ki],kp[ai]);h.push(a);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const d=avg(h.slice(-4))-avg(h.slice(0,5));return a>155?(sr?'右':'左')+'片足立ち':d<-5?'下降中 ↓':d>5?'上昇中 ↑':a<115?'ボトム':'中間位';}
-function phaseJump(kp,h){const ay=(kp[15].y+kp[16].y)/2;h.push(ay);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const vel=ay-avg(h.slice(-5,-2)),hipY=(kp[11].y+kp[12].y)/2;if(kp[15].score>.3&&kp[16].score>.3&&kp[15].y<hipY&&kp[16].y<hipY)return'空中 ✈️';if(vel>15)return'⚠️ 着地 (チェック!)';if(avg([calcAngle(kp[11],kp[13],kp[15]),calcAngle(kp[12],kp[14],kp[16])])<140)return'着地吸収中';return'助走 / 立位';}
-function phaseCut(kp,h){const cx=(kp[11].x+kp[12].x)/2;h.push(cx);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const lat=Math.abs(avg(h.slice(-3))-avg(h.slice(0,5))),lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180;return lat>30?'⚠️ 切り返し (チェック!)':Math.min(lK,rK)<140?'接地 屈曲中':'助走';}
+function phaseJump(kp,h){
+  const ls=kp[15].score>.25,rs=kp[16].score>.25;
+  const ay=ls&&rs?(kp[15].y+kp[16].y)/2:ls?kp[15].y:rs?kp[16].y:null;
+  if(ay===null){if(h.length>0)h.push(h[h.length-1]);if(h.length>HIST)h.shift();return'検出中...';}
+  h.push(ay);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';
+  const vel=ay-avg(h.slice(-5,-2)),hipY=(kp[11].y+kp[12].y)/2;
+  if(ls&&rs&&kp[15].y<hipY&&kp[16].y<hipY)return'空中 ✈️';
+  if(vel>lastCanvasW*0.012)return'⚠️ 着地 (チェック!)';
+  if(avg([calcAngle(kp[11],kp[13],kp[15]),calcAngle(kp[12],kp[14],kp[16])])<140)return'着地吸収中';
+  return'助走 / 立位';
+}
+function phaseCut(kp,h){const cx=(kp[11].x+kp[12].x)/2;h.push(cx);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const lat=Math.abs(avg(h.slice(-3))-avg(h.slice(0,5))),lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180;return lat>(lastCanvasW*0.025)?'⚠️ 切り返し (チェック!)':Math.min(lK,rK)<140?'接地 屈曲中':'助走';}
 function phaseStop(kp,h){const cy=(kp[11].y+kp[12].y)/2;h.push(cy);if(h.length>HIST)h.shift();if(h.length<6)return'検出中...';const vel=avg(h.slice(-3))-avg(h.slice(0,5)),s=bestSide(kp),knee=s?calcAngle(s.hip,s.knee,s.ank):180;return vel>15&&knee<150?'⚠️ 制動 (チェック!)':knee<140?'制動中':'助走 / 立位';}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let detector=null,cameraRunning=false,camProcessing=false,camStream=null,facingMode='environment';
-let camView='side',currentMove='squat';
+let camView='side',currentMove='squat',lastCanvasW=1280;
 const vidProc={side:false,front:false};
 const phaseHist={cam:[],side:[],front:[]};
 
@@ -598,6 +608,7 @@ function updateVidBar(view){
 // ── Core processFrame ─────────────────────────────────────────────────────────
 async function processFrame(src, canvas, view, histKey){
   const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
+  if(W>0) lastCanvasW=W;
   ctx.clearRect(0,0,W,H); ctx.drawImage(src,0,0,W,H);
   const poses=await detector.estimatePoses(src,{flipHorizontal:false});
   const isVid=(histKey!=='cam');
@@ -808,8 +819,8 @@ function generateComments(){
     else if(minK>120) comments.push({level:'warn',title:'着地時膝屈曲がやや不十分',text:`着地時の膝屈曲が浅めです（最小 ${Math.round(minK)}°）。より膝を曲げて衝撃を吸収する着地練習を推奨します。`});
   }
 
-  // 左右対称性
-  const symData=ts.sym||tfront.sym;
+  // 左右対称性（正面計測を優先、なければ側面）
+  const symData=tfront.sym||ts.sym;
   if(symData){
     const maxS=symData.max;
     if(maxS>18) comments.push({level:'ng',title:'左右非対称（大）',text:`膝屈曲角度の左右差が最大 ${Math.round(maxS)}° あります。患側・健側の非対称な動作パターンは再受傷リスクに繋がります。患側の機能回復と動作再教育を優先してください。`});
@@ -831,7 +842,7 @@ function generateOkComments(){
   const ts=tracking.side, tfront=tracking.front;
   if(tfront.valgus&&tfront.valgus.min>170) ok.push({title:'膝外反',text:'動作全体を通じて膝外反は認められませんでした。良好な動作パターンです。'});
   if(ts.trunk&&ts.trunk.max<35) ok.push({title:'体幹前傾',text:'体幹前傾角は動作全体を通じて良好な範囲内でした。'});
-  if(currentMove==='jump'&&ts.knee&&ts.knee.min<100) ok.push({title:'着地衝撃吸収',text:`着地時の膝屈曲が十分で（最小 ${Math.round(ts.knee.min)}°）、良好な衝撃吸収パターンが確認されました。`});
+  if(currentMove==='jump'){const kMin=ts.knee?.min;if(kMin!=null&&kMin<100)ok.push({title:'着地衝撃吸収',text:`着地時の膝屈曲が十分で（側面最小 ${Math.round(kMin)}°）、良好な衝撃吸収パターンが確認されました。`});}
   return ok;
 }
 </script>
