@@ -320,27 +320,28 @@ function fmt(s){if(!isFinite(s))return'0:00';return`${Math.floor(s/60)}:${String
 // ── Eval functions ────────────────────────────────────────────────────────────
 function evalGenericSide(kp){const s=bestSide(kp);if(!s)return null;const knee=calcAngle(s.hip,s.knee,s.ank),trunk=fwdLean(s.sh,s.hip),hip=s.hip.y>s.knee.y,lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):null,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):null;return{knee,trunk,hip,sym:lK!=null&&rK!=null?Math.abs(lK-rK):null};}
 function evalLungeSide(kp){if(!ok(kp,11,13,15)&&!ok(kp,12,14,16))return null;const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180,s=bestSide(kp);return{frontKnee:Math.min(lK,rK),rearKnee:Math.max(lK,rK),trunk:s?fwdLean(s.sh,s.hip):0,pelvic:ok(kp,11,12)?pelvTilt(kp):0};}
-function evalGenericFront(kp){const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null,rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null,valgus=lV!=null&&rV!=null?Math.min(lV,rV):(lV??rV??180);return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
-function evalSingleFront(kp){const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];if(!ok(kp,hi,ki,ai))return null;return{valgus:calcFPPA(kp[hi],kp[ki],kp[ai],sr),pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
-function evalJumpFront(kp){const lv=ok(kp,11,13,15),rv=ok(kp,12,14,16);if(!lv&&!rv)return null;const lVal=lv?calcFPPA(kp[11],kp[13],kp[15],false):180,rVal=rv?calcFPPA(kp[12],kp[14],kp[16],true):180;return{lValgus:lVal,rValgus:rVal,sym:lv&&rv?Math.abs(lVal-rVal):null};}
-function evalCutFront(kp){const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null,rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null;return{valgus:lV!=null&&rV!=null?Math.min(lV,rV):(lV??rV??180),trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+// null安全なFPPA最小値（両方nullなら null を返す）
+function minFPPA(a,b){if(a==null&&b==null)return null;if(a==null)return b;if(b==null)return a;return Math.min(a,b);}
+function evalGenericFront(kp){const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null,rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null,valgus=minFPPA(lV,rV);return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+function evalSingleFront(kp){const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];if(!ok(kp,hi,ki,ai))return null;const valgus=calcFPPA(kp[hi],kp[ki],kp[ai],sr);if(valgus==null)return null;return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
+function evalJumpFront(kp){const lv=ok(kp,11,13,15),rv=ok(kp,12,14,16);if(!lv&&!rv)return null;const lVal=lv?calcFPPA(kp[11],kp[13],kp[15],false):null,rVal=rv?calcFPPA(kp[12],kp[14],kp[16],true):null;if(lVal==null&&rVal==null)return null;return{lValgus:lVal,rValgus:rVal,sym:(lVal!=null&&rVal!=null)?Math.abs(lVal-rVal):null};}
+function evalCutFront(kp){const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null,rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null;const valgus=minFPPA(lV,rV);return{valgus,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};}
 // ランジ専用: 後脚の膝は床に近く正面からFPPAが不正確なため、前脚のみ評価
 function evalLungeFront(kp){
   const lOk=ok(kp,11,13,15),rOk=ok(kp,12,14,16);
-  if(!lOk&&!rOk)return{valgus:180,pelvicDrop:0,trunkLat:0};
+  if(!lOk&&!rOk)return null;
   const lFPPA=lOk?calcFPPA(kp[11],kp[13],kp[15],false):null;
   const rFPPA=rOk?calcFPPA(kp[12],kp[14],kp[16],true):null;
-  if(!lOk)return{valgus:rFPPA,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
-  if(!rOk)return{valgus:lFPPA,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
-  // 前脚の特定: 後脚の膝は床に近い（画面下方=y大）
-  // 脚長を基準に閾値を正規化
+  if(!lOk)return rFPPA==null?null:{valgus:rFPPA,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
+  if(!rOk)return lFPPA==null?null:{valgus:lFPPA,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
   const legLen=Math.max(Math.abs(kp[11].y-kp[15].y),Math.abs(kp[12].y-kp[16].y),100);
   const thresh=legLen*0.12;
-  const yDiff=kp[14].y-kp[13].y; // 右膝y - 左膝y
+  const yDiff=kp[14].y-kp[13].y;
   let valgus, frontKneeY;
-  if(yDiff>thresh){      valgus=lFPPA; frontKneeY=kp[13].y; } // 左が前脚
-  else if(yDiff<-thresh){ valgus=rFPPA; frontKneeY=kp[14].y; } // 右が前脚
-  else                  { valgus=Math.min(lFPPA,rFPPA); frontKneeY=Math.max(kp[13].y,kp[14].y); }
+  if(yDiff>thresh){      valgus=lFPPA; frontKneeY=kp[13].y; }
+  else if(yDiff<-thresh){ valgus=rFPPA; frontKneeY=kp[14].y; }
+  else                  { valgus=minFPPA(lFPPA,rFPPA); frontKneeY=Math.max(kp[13].y,kp[14].y); }
+  if(valgus==null)return null;
   return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,frontKneeY};
 }
 
