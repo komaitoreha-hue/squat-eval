@@ -80,6 +80,13 @@
     .ng   { background:#fed7d7;color:#742a2a; }
     .na   { background:#e2e8f0;color:#718096; }
 
+    /* ── Lightbox ── */
+    .lightbox { position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:900;display:flex;align-items:center;justify-content:center; }
+    .lightbox img { max-width:100%;max-height:100%;object-fit:contain;touch-action:pinch-zoom; }
+    .lightbox-close { position:absolute;top:14px;right:14px;background:rgba(255,255,255,.2);border:none;color:white;font-size:22px;padding:6px 14px;border-radius:10px;cursor:pointer;z-index:1; }
+    .media-wrap canvas { cursor:zoom-in; }
+    .peak-thumb { cursor:zoom-in; }
+
     /* ── Summary modal ── */
     .modal { position:fixed;inset:0;z-index:600;display:flex;flex-direction:column;justify-content:flex-end; }
     .modal-bg { position:absolute;inset:0;background:rgba(0,0,0,.5); }
@@ -118,6 +125,12 @@
 <div id="loadingOverlay">
   <div class="spinner"></div>
   <div class="loading-text" id="loadingText">AIモデル読み込み中...<br><small style="color:#a0aec0">初回は少し時間がかかります</small></div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" class="lightbox" style="display:none" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">&#10005;</button>
+  <img id="lightboxImg" src="" alt="">
 </div>
 
 <!-- Summary modal -->
@@ -321,6 +334,16 @@ function updateTracking(view, data, currentTime, canvas) {
   document.getElementById('summaryBtn').disabled = false;
 }
 
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+function openLightbox(src){
+  document.getElementById('lightboxImg').src=src;
+  document.getElementById('lightbox').style.display='flex';
+}
+function closeLightbox(){
+  document.getElementById('lightbox').style.display='none';
+  document.getElementById('lightboxImg').src='';
+}
+
 // Return the value with worst clinical grade (min or max, whichever is worse)
 function getWorst(key, t) {
   if (!t || !MDEFS[key]) return null;
@@ -333,6 +356,13 @@ function getWorst(key, t) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 renderMetricsUI();
+// Canvas tap → lightbox
+['sideCanvas','frontCanvas','camCanvas'].forEach(id=>{
+  const el=document.getElementById(id);
+  el.addEventListener('click',function(){
+    if(this.width>0) openLightbox(this.toDataURL('image/jpeg',0.92));
+  });
+});
 (async()=>{
   try{
     await tf.setBackend('webgl'); await tf.ready();
@@ -601,7 +631,7 @@ function showSummary(){
           <span class="badge ${w.cls}">${MDEFS[key].grade(w.val)[1]}</span>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;margin-left:8px">
-          ${w.img?`<img src="${w.img}" class="peak-thumb" style="border:2px solid ${borderCol}">`:``}
+          ${w.img?`<img src="${w.img}" class="peak-thumb" style="border:2px solid ${borderCol}" onclick="openLightbox(this.src)">`:``}
           <div class="step-group">
             <button class="jump-btn" onclick="stepFromSummary('${view}',${w.time.toFixed(2)},-1)">◄</button>
             <button class="jump-btn" onclick="jumpToFrame('${view}',${w.time.toFixed(2)})">▶ ${fmt(w.time)}</button>
