@@ -303,7 +303,10 @@ function calcFPPA(hip,knee,ank,isRightLeg){
   if(Math.abs(ank.y-hip.y)<5)return angle;
   const lineX=hip.x+(ank.x-hip.x)*(knee.y-hip.y)/(ank.y-hip.y);
   const isValgus=isRightLeg?(knee.x>lineX):(knee.x<lineX);
-  return isValgus?angle:360-angle;
+  const fppa=isValgus?angle:360-angle;
+  // 解剖学的にありえない値（ランドマーク検出失敗）は null を返す
+  if(fppa<100||fppa>260)return null;
+  return fppa;
 }
 function ok(kp,...ii){return ii.every(i=>kp[i]&&kp[i].score>.3);}
 function avg(a){return a.reduce((s,v)=>s+v,0)/a.length;}
@@ -388,11 +391,11 @@ function updateTracking(view, data, currentTime, canvas) {
       const img=canvas?captureThumb(canvas):null;
       t[key] = {min:val, max:val, minTime:currentTime, maxTime:currentTime, minImg:img, maxImg:img, series:[]};
     }
-    // 外れ値フィルター: 直近5点の中央値から20°以上離れていたら無視
+    // 外れ値フィルター: 直近点の中央値から20°以上離れていたら無視（3点以上で発動）
     const ser=t[key].series;
-    if(ser.length>=5){
+    if(ser.length>=3){
       const recent=ser.slice(-5).map(p=>p.v).sort((a,b)=>a-b);
-      const median=recent[2];
+      const median=recent[Math.floor(recent.length/2)];
       if(Math.abs(val-median)>20) return;
     }
     if (val < t[key].min) { t[key].min=val; t[key].minTime=currentTime; if(canvas)t[key].minImg=captureThumb(canvas); }
