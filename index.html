@@ -145,6 +145,9 @@
     <button onclick="lbStep(1)">&#9654;&#9654;</button>
     <span class="lb-time" id="lbTime">0:00</span>
   </div>
+  <div id="lbChartWrap" style="display:none;width:100%;padding:4px 10px 10px" onclick="event.stopPropagation()">
+    <canvas id="lbChart" style="width:100%;height:90px;display:block;border-radius:8px;touch-action:none;cursor:col-resize"></canvas>
+  </div>
 </div>
 
 <!-- Summary modal -->
@@ -395,7 +398,7 @@ function updateTracking(view, data, currentTime, canvas) {
 }
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
-let lbView=null, lbVideoMode=false, lbScale=1, lbLastDist=0;
+let lbView=null, lbVideoMode=false, lbScale=1, lbLastDist=0, lbSeries=null, lbMdef=null;
 
 function openLightbox(src){
   lbVideoMode=false; lbView=null;
@@ -406,12 +409,15 @@ function openLightbox(src){
   img.src=src; img.style.transform=''; lbScale=1;
   document.getElementById('lightbox').style.display='flex';
 }
-function openVideoLightbox(view, time){
+function openVideoLightbox(view, time, series, mdef){
   const v=document.getElementById(view+'Vid'); if(!v.src||!v.duration)return;
   lbVideoMode=true; lbView=view;
+  lbSeries=series||null; lbMdef=mdef||null;
   document.getElementById('lbImg').style.display='none';
   document.getElementById('lbCanvas').style.display='block';
   document.getElementById('lbControls').style.display='flex';
+  const chartWrap=document.getElementById('lbChartWrap');
+  chartWrap.style.display=(lbSeries&&lbSeries.length>=2)?'block':'none';
   document.getElementById('lightbox').style.display='flex';
   v.pause(); document.getElementById(view+'PlayBtn').innerHTML='&#9654;';
   document.getElementById('lbPlayBtn').innerHTML='&#9654;';
@@ -429,7 +435,14 @@ function syncLightboxCanvas(){
   const lbc=document.getElementById('lbCanvas');
   lbc.width=src.width; lbc.height=src.height;
   lbc.getContext('2d').drawImage(src,0,0);
-  document.getElementById('lbTime').textContent=fmt(document.getElementById(lbView+'Vid').currentTime);
+  const t=document.getElementById(lbView+'Vid').currentTime;
+  document.getElementById('lbTime').textContent=fmt(t);
+  drawLbChart(t);
+}
+function drawLbChart(cursorTime){
+  if(!lbSeries||lbSeries.length<2)return;
+  const cv=document.getElementById('lbChart');
+  _drawChart(cv,lbSeries,lbMdef,lbView,cursorTime);
 }
 async function lbStep(dir){
   if(!lbView)return;
@@ -441,6 +454,7 @@ async function lbStep(dir){
     v.removeEventListener('seeked',f);
     await processFrame(v,document.getElementById(lbView+'Canvas'),lbView,lbView);
     updateVidBar(lbView); syncLightboxCanvas();
+    drawLbChart(v.currentTime);
   },{once:true});
 }
 function lbTogglePlay(){
@@ -461,10 +475,43 @@ function closeLightbox(){
     const v=document.getElementById(lbView+'Vid');
     v.pause(); document.getElementById(lbView+'PlayBtn').innerHTML='&#9654;';
   }
-  lbVideoMode=false; lbView=null;
+  lbVideoMode=false; lbView=null; lbSeries=null; lbMdef=null;
   document.getElementById('lightbox').style.display='none';
   document.getElementById('lbImg').src='';
+  document.getElementById('lbChartWrap').style.display='none';
 }
+// ── Lightbox chart drag scrubber ──────────────────────────────────────────────
+(function(){
+  const cv=document.getElementById('lbChart');
+  let dragging=false;
+  function seekFromChart(clientX){
+    if(!lbSeries||lbSeries.length<2||!lbView)return;
+    const rect=cv.getBoundingClientRect();
+    const ml=34,mr=6,cW=rect.width-ml-mr;
+    const tMin=lbSeries[0].t,tMax=lbSeries[lbSeries.length-1].t;
+    const t=tMin+Math.max(0,Math.min(1,(clientX-rect.left-ml)/cW))*(tMax-tMin);
+    const v=document.getElementById(lbView+'Vid');
+    if(!v.src||!v.duration)return;
+    v.pause();
+    document.getElementById(lbView+'PlayBtn').innerHTML='&#9654;';
+    document.getElementById('lbPlayBtn').innerHTML='&#9654;';
+    const clamped=Math.max(0,Math.min(v.duration,t));
+    // 即時グラフ更新（seeked待ち前）
+    drawLbChart(clamped);
+    v.currentTime=clamped;
+    v.addEventListener('seeked',async function f(){
+      v.removeEventListener('seeked',f);
+      await processFrame(v,document.getElementById(lbView+'Canvas'),lbView,lbView);
+      updateVidBar(lbView); syncLightboxCanvas();
+    },{once:true});
+  }
+  cv.addEventListener('touchstart',e=>{dragging=true;seekFromChart(e.touches[0].clientX);e.preventDefault();},{passive:false});
+  cv.addEventListener('touchmove', e=>{if(dragging)seekFromChart(e.touches[0].clientX);e.preventDefault();},{passive:false});
+  cv.addEventListener('touchend', ()=>{dragging=false;});
+  cv.addEventListener('mousedown', e=>{dragging=true;seekFromChart(e.clientX);});
+  cv.addEventListener('mousemove', e=>{if(dragging)seekFromChart(e.clientX);});
+  document.addEventListener('mouseup',()=>{dragging=false;});
+})();
 // Pinch zoom for image mode
 (function(){
   const img=document.getElementById('lbImg');
@@ -865,7 +912,7 @@ function drawCharts(){
   });
 }
 
-function _drawChart(cv,series,mdef,view){
+function _drawChart(cv,series,mdef,view,cursorTime){
   const dpr=Math.min(window.devicePixelRatio||1,2);
   const W=cv.offsetWidth||300,H=cv.offsetHeight||80;
   cv.width=W*dpr; cv.height=H*dpr;
@@ -928,12 +975,27 @@ function _drawChart(cv,series,mdef,view){
   ctx.fillStyle=wCls==='ng'?'#e53e3e':wCls==='warn'?'#d69e2e':'#48bb78';
   ctx.fill(); ctx.strokeStyle='white';ctx.lineWidth=1.5;ctx.stroke();
 
-  // タップでフレームジャンプ
+  // カーソル線 + ドット
+  if(cursorTime!=null&&cursorTime>=tMin&&cursorTime<=tMax){
+    const cx=tx(cursorTime);
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,0.85)';ctx.lineWidth=1.5;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(cx,mt);ctx.lineTo(cx,mt+cH);ctx.stroke();
+    ctx.setLineDash([]);ctx.restore();
+    // 最近傍点にドット
+    const near=series.reduce((a,b)=>Math.abs(b.t-cursorTime)<Math.abs(a.t-cursorTime)?b:a);
+    ctx.beginPath();ctx.arc(tx(near.t),ty(near.v),6,0,2*Math.PI);
+    ctx.fillStyle='white';ctx.fill();
+    ctx.strokeStyle='#2b6cb0';ctx.lineWidth=2;ctx.stroke();
+  }
+
+  // タップでフレームジャンプ（ライトボックス未表示時のみ）
   cv.onclick=e=>{
+    if(lbVideoMode)return; // ライトボックス中はdragハンドラで処理
     const rect=cv.getBoundingClientRect();
     const xRel=(e.clientX-rect.left);
     const t=tMin+Math.max(0,(xRel-ml)/cW)*(tMax-tMin);
-    if(t>=tMin&&t<=tMax) openVideoLightbox(view,t);
+    if(t>=tMin&&t<=tMax) openVideoLightbox(view,t,series,mdef);
   };
 }
 
