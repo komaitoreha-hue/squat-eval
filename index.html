@@ -404,7 +404,7 @@ function updateTracking(view, data, currentTime, canvas) {
 }
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
-let lbView=null, lbVideoMode=false, lbScale=1, lbLastDist=0, lbSeries=null, lbMdef=null;
+let lbView=null, lbVideoMode=false, lbScale=1, lbLastDist=0, lbSeries=null, lbMdef=null, lbMetricKey=null;
 
 function openLightbox(src){
   lbVideoMode=false; lbView=null;
@@ -415,10 +415,10 @@ function openLightbox(src){
   img.src=src; img.style.transform=''; lbScale=1;
   document.getElementById('lightbox').style.display='flex';
 }
-function openVideoLightbox(view, time, series, mdef){
+function openVideoLightbox(view, time, series, mdef, metricKey){
   const v=document.getElementById(view+'Vid'); if(!v.src||!v.duration)return;
   lbVideoMode=true; lbView=view;
-  lbSeries=series||null; lbMdef=mdef||null;
+  lbSeries=series||null; lbMdef=mdef||null; lbMetricKey=metricKey||null;
   document.getElementById('lbImg').style.display='none';
   document.getElementById('lbCanvas').style.display='block';
   document.getElementById('lbControls').style.display='flex';
@@ -448,7 +448,7 @@ function syncLightboxCanvas(){
 function drawLbChart(cursorTime){
   if(!lbSeries||lbSeries.length<2)return;
   const cv=document.getElementById('lbChart');
-  _drawChart(cv,lbSeries,lbMdef,lbView,cursorTime);
+  _drawChart(cv,lbSeries,lbMdef,lbView,cursorTime,lbMetricKey);
 }
 async function lbStep(dir){
   if(!lbView)return;
@@ -492,7 +492,7 @@ function closeLightbox(){
   }
   if(lbView) document.getElementById(lbView+'Vid').playbackRate=1;
   lbSpeedIdx=0; document.getElementById('lbSpeedBtn').textContent='1x';
-  lbVideoMode=false; lbView=null; lbSeries=null; lbMdef=null;
+  lbVideoMode=false; lbView=null; lbSeries=null; lbMdef=null; lbMetricKey=null;
   document.getElementById('lightbox').style.display='none';
   document.getElementById('lbImg').src='';
   document.getElementById('lbChartWrap').style.display='none';
@@ -787,17 +787,45 @@ function drawCornerLabels(ctx,labels){
   });
   ctx.restore();
 }
+function drawHighlightLine(ctx,p1,p2,color){
+  const scale=ctx.canvas.width/400;
+  ctx.save();ctx.strokeStyle=color;ctx.lineWidth=Math.max(3,4*scale);ctx.lineCap='round';
+  ctx.shadowColor=color;ctx.shadowBlur=8;
+  ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();
+  ctx.restore();
+}
 function drawArcs(ctx,kp,view,data){
+  const key=lbMetricKey; // ライトボックスで開いた場合のみセット
   const labels=[];
   if(view==='side'){
     const s=bestSide(kp);
-    if(s&&data.knee!=null){drawArc(ctx,s.hip,s.knee,s.ank,'#ffd700');labels.push({text:`膝 ${Math.round(data.knee)}°`,color:'#ffd700'});}
+    if(s){
+      const showKnee=!key||key==='knee'||key==='frontKnee'||key==='rearKnee';
+      const showTrunk=!key||key==='trunk';
+      if(showKnee&&data.knee!=null){drawArc(ctx,s.hip,s.knee,s.ank,'#ffd700');labels.push({text:`膝 ${Math.round(data.knee)}°`,color:'#ffd700'});}
+      if(showTrunk&&data.trunk!=null&&ok(kp,5,6,11,12)){
+        const sh={x:(kp[5].x+kp[6].x)/2,y:(kp[5].y+kp[6].y)/2},hip={x:(kp[11].x+kp[12].x)/2,y:(kp[11].y+kp[12].y)/2};
+        drawHighlightLine(ctx,sh,hip,'#63b3ed');labels.push({text:`体幹 ${Math.round(data.trunk)}°`,color:'#63b3ed'});
+      }
+    }
   } else {
-    if(data.lValgus!=null&&ok(kp,11,13,15)){drawArc(ctx,kp[11],kp[13],kp[15],'#ff6b81');labels.push({text:`左膝 ${Math.round(data.lValgus)}°`,color:'#ff6b81'});}
-    if(data.rValgus!=null&&ok(kp,12,14,16)){drawArc(ctx,kp[12],kp[14],kp[16],'#ffd700');labels.push({text:`右膝 ${Math.round(data.rValgus)}°`,color:'#ffd700'});}
-    if(data.valgus!=null&&data.lValgus==null){
-      const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];
-      if(ok(kp,hi,ki,ai)){drawArc(ctx,kp[hi],kp[ki],kp[ai],'#ff6b81');labels.push({text:`膝 ${Math.round(data.valgus)}°`,color:'#ff6b81'});}
+    const showValgus=!key||key==='valgus'||key==='lValgus'||key==='rValgus';
+    const showPelvic=!key||key==='pelvicDrop'||key==='pelvic';
+    const showTrunkLat=!key||key==='trunkLat';
+    if(showValgus){
+      if(data.lValgus!=null&&ok(kp,11,13,15)){drawArc(ctx,kp[11],kp[13],kp[15],'#ff6b81');labels.push({text:`左膝 ${Math.round(data.lValgus)}°`,color:'#ff6b81'});}
+      if(data.rValgus!=null&&ok(kp,12,14,16)){drawArc(ctx,kp[12],kp[14],kp[16],'#ffd700');labels.push({text:`右膝 ${Math.round(data.rValgus)}°`,color:'#ffd700'});}
+      if(data.valgus!=null&&data.lValgus==null){
+        const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];
+        if(ok(kp,hi,ki,ai)){drawArc(ctx,kp[hi],kp[ki],kp[ai],'#ff6b81');labels.push({text:`膝 ${Math.round(data.valgus)}°`,color:'#ff6b81'});}
+      }
+    }
+    if(showPelvic&&data.pelvicDrop!=null&&ok(kp,11,12)){
+      drawHighlightLine(ctx,kp[11],kp[12],'#f6ad55');labels.push({text:`骨盤 ${Math.round(data.pelvicDrop)}°`,color:'#f6ad55'});
+    }
+    if(showTrunkLat&&data.trunkLat!=null&&ok(kp,5,6,11,12)){
+      const sh={x:(kp[5].x+kp[6].x)/2,y:(kp[5].y+kp[6].y)/2},hip={x:(kp[11].x+kp[12].x)/2,y:(kp[11].y+kp[12].y)/2};
+      drawHighlightLine(ctx,sh,hip,'#63b3ed');labels.push({text:`体幹 ${Math.round(data.trunkLat)}°`,color:'#63b3ed'});
     }
   }
   drawCornerLabels(ctx,labels);
@@ -959,11 +987,11 @@ function drawCharts(){
     const view=cv.dataset.view,key=cv.dataset.key;
     const entry=tracking[view]?.[key];
     if(!entry||!entry.series||entry.series.length<2)return;
-    _drawChart(cv,entry.series,MDEFS[key],view);
+    _drawChart(cv,entry.series,MDEFS[key],view,null,key);
   });
 }
 
-function _drawChart(cv,series,mdef,view,cursorTime){
+function _drawChart(cv,series,mdef,view,cursorTime,metricKey){
   const dpr=Math.min(window.devicePixelRatio||1,2);
   const W=cv.offsetWidth||300,H=cv.offsetHeight||80;
   cv.width=W*dpr; cv.height=H*dpr;
@@ -1046,7 +1074,7 @@ function _drawChart(cv,series,mdef,view,cursorTime){
     const rect=cv.getBoundingClientRect();
     const xRel=(e.clientX-rect.left);
     const t=tMin+Math.max(0,(xRel-ml)/cW)*(tMax-tMin);
-    if(t>=tMin&&t<=tMax) openVideoLightbox(view,t,series,mdef);
+    if(t>=tMin&&t<=tMax) openVideoLightbox(view,t,series,mdef,metricKey);
   };
 }
 
