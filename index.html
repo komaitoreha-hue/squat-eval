@@ -388,13 +388,18 @@ function updateTracking(view, data, currentTime, canvas) {
       const img=canvas?captureThumb(canvas):null;
       t[key] = {min:val, max:val, minTime:currentTime, maxTime:currentTime, minImg:img, maxImg:img, series:[]};
     }
+    // 外れ値フィルター: 直近5点の中央値から20°以上離れていたら無視
+    const ser=t[key].series;
+    if(ser.length>=5){
+      const recent=ser.slice(-5).map(p=>p.v).sort((a,b)=>a-b);
+      const median=recent[2];
+      if(Math.abs(val-median)>20) return;
+    }
     if (val < t[key].min) { t[key].min=val; t[key].minTime=currentTime; if(canvas)t[key].minImg=captureThumb(canvas); }
     if (val > t[key].max) { t[key].max=val; t[key].maxTime=currentTime; if(canvas)t[key].maxImg=captureThumb(canvas); }
     // 時系列データ蓄積（約0.1秒間隔にダウンサンプリング）
-    const ser=t[key].series;
     if(ser.length===0||currentTime-ser[ser.length-1].t>=0.1) ser.push({t:currentTime,v:val});
   });
-  // Enable summary button
   document.getElementById('summaryBtn').disabled = false;
 }
 
