@@ -644,25 +644,24 @@ function loadVid(e,view){
   if(v.src)URL.revokeObjectURL(v.src);
   tracking[view]={}; // reset tracking for this view
   v.src=URL.createObjectURL(file); v.load();
-  v.addEventListener('loadedmetadata',()=>{
+  v.onloadedmetadata=()=>{
     c.width=v.videoWidth; c.height=v.videoHeight;
     document.getElementById(view+'MiniBar').style.display='flex';
     document.getElementById(view+'Phase').textContent='▶ 再生してください';
     updateVidBar(view);
-  },{once:true});
-  v.addEventListener('timeupdate',()=>updateVidBar(view));
-  v.addEventListener('play',()=>{document.getElementById(view+'PlayBtn').innerHTML='&#9646;&#9646;';if(lbView===view)document.getElementById('lbPlayBtn').innerHTML='&#9646;&#9646;';vidLoop(view);});
-  v.addEventListener('pause',()=>{document.getElementById(view+'PlayBtn').innerHTML='&#9654;';if(lbView===view)document.getElementById('lbPlayBtn').innerHTML='&#9654;';});
-  v.addEventListener('ended',()=>{
+  };
+  v.ontimeupdate=()=>updateVidBar(view);
+  v.onplay=()=>{document.getElementById(view+'PlayBtn').innerHTML='&#9646;&#9646;';if(lbView===view)document.getElementById('lbPlayBtn').innerHTML='&#9646;&#9646;';vidLoop(view);};
+  v.onpause=()=>{document.getElementById(view+'PlayBtn').innerHTML='&#9654;';if(lbView===view)document.getElementById('lbPlayBtn').innerHTML='&#9654;';};
+  v.onended=()=>{
     document.getElementById(view+'PlayBtn').innerHTML='&#9654;';
     vidProc[view]=false;
     document.getElementById(view+'Phase').textContent='再生終了';
-    // Auto-show summary prompt if both views have data
     if(Object.keys(tracking.side).length>0||Object.keys(tracking.front).length>0){
       document.getElementById('summaryBtn').disabled=false;
       document.getElementById('summaryBtn').textContent='解析サマリーを表示 📋 ← タップ';
     }
-  });
+  };
 }
 function toggleVid(view){const v=document.getElementById(view+'Vid');v.paused?v.play():v.pause();}
 async function vidLoop(view){
