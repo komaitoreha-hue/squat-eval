@@ -106,6 +106,9 @@
     .jump-btn { background:#ebf8ff;border:none;color:#2b6cb0;padding:6px 11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0; }
     .step-group { display:flex;gap:4px;justify-content:flex-end;margin-top:4px; }
     .peak-thumb { width:100px;border-radius:8px;display:block;margin-bottom:4px; }
+    .chart-wrap { margin:6px 0 14px; }
+    .chart-label { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#4a5568;margin-bottom:3px; }
+    .chart-cv { width:100%;height:80px;display:block;border-radius:8px;cursor:pointer;background:#f7fafc; }
 
     .comment-card { border-radius:10px;padding:12px;margin-bottom:8px; }
     .comment-card.ok   { background:#f0fff4;border-left:4px solid #38a169; }
@@ -356,11 +359,13 @@ function updateTracking(view, data, currentTime, canvas) {
     if (typeof val !== 'number' || !isFinite(val)) return;
     if (!t[key]) {
       const img=canvas?captureThumb(canvas):null;
-      t[key] = {min:val, max:val, minTime:currentTime, maxTime:currentTime, minImg:img, maxImg:img};
-      return;
+      t[key] = {min:val, max:val, minTime:currentTime, maxTime:currentTime, minImg:img, maxImg:img, series:[]};
     }
     if (val < t[key].min) { t[key].min=val; t[key].minTime=currentTime; if(canvas)t[key].minImg=captureThumb(canvas); }
     if (val > t[key].max) { t[key].max=val; t[key].maxTime=currentTime; if(canvas)t[key].maxImg=captureThumb(canvas); }
+    // 時系列データ蓄積（約0.1秒間隔にダウンサンプリング）
+    const ser=t[key].series;
+    if(ser.length===0||currentTime-ser[ser.length-1].t>=0.1) ser.push({t:currentTime,v:val});
   });
   // Enable summary button
   document.getElementById('summaryBtn').disabled = false;
@@ -744,6 +749,13 @@ function showSummary(){
           </div>
         </div>
       </div>`;
+      // グラフ
+      if(t[key]?.series?.length>=2){
+        html+=`<div class="chart-wrap">
+          <div class="chart-label">${MDEFS[key].label} — 時系列 <span style="font-weight:400;color:#a0aec0">（タップでジャンプ）</span></div>
+          <canvas class="chart-cv" data-chart data-view="${view}" data-key="${key}"></canvas>
+        </div>`;
+      }
     });
   });
 
@@ -780,8 +792,91 @@ function showSummary(){
   document.getElementById('summaryBody').innerHTML=html;
   document.getElementById('summaryModal').style.display='flex';
   document.getElementById('summaryBtn').textContent='解析サマリーを表示 📋';
+  requestAnimationFrame(drawCharts);
 }
 function closeSummary(){document.getElementById('summaryModal').style.display='none';}
+
+// ── Chart drawing ─────────────────────────────────────────────────────────────
+function drawCharts(){
+  document.querySelectorAll('[data-chart]').forEach(cv=>{
+    const view=cv.dataset.view,key=cv.dataset.key;
+    const entry=tracking[view]?.[key];
+    if(!entry||!entry.series||entry.series.length<2)return;
+    _drawChart(cv,entry.series,MDEFS[key],view);
+  });
+}
+
+function _drawChart(cv,series,mdef,view){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const W=cv.offsetWidth||300,H=cv.offsetHeight||80;
+  cv.width=W*dpr; cv.height=H*dpr;
+  const ctx=cv.getContext('2d');
+  ctx.scale(dpr,dpr);
+
+  const ml=34,mr=6,mt=6,mb=16;
+  const cW=W-ml-mr,cH=H-mt-mb;
+
+  const vals=series.map(p=>p.v);
+  const tMin=series[0].t,tMax=series[series.length-1].t;
+  const dMin=Math.min(...vals),dMax=Math.max(...vals);
+  const pad=Math.max((dMax-dMin)*0.25,5);
+  const yMin=dMin-pad,yMax=dMax+pad;
+
+  const tx=t=>ml+(t-tMin)/Math.max(tMax-tMin,0.001)*cW;
+  const ty=v=>mt+cH-(v-yMin)/(yMax-yMin)*cH;
+
+  // 背景
+  ctx.fillStyle='#f7fafc'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='white'; ctx.beginPath();
+  ctx.roundRect?ctx.roundRect(ml,mt,cW,cH,4):ctx.rect(ml,mt,cW,cH);
+  ctx.fill();
+
+  // グリッド + Y軸ラベル
+  ctx.strokeStyle='rgba(0,0,0,0.07)'; ctx.lineWidth=1;
+  ctx.fillStyle='#a0aec0'; ctx.font='9px -apple-system,sans-serif'; ctx.textAlign='right';
+  [0,0.33,0.67,1].forEach(f=>{
+    const v=yMin+(yMax-yMin)*f, y=ty(v);
+    ctx.beginPath();ctx.moveTo(ml,y);ctx.lineTo(W-mr,y);ctx.stroke();
+    ctx.fillText(Math.round(v)+'°',ml-3,y+3);
+  });
+
+  // X軸ラベル（時刻）
+  ctx.fillStyle='#a0aec0'; ctx.textAlign='center'; ctx.font='9px -apple-system,sans-serif';
+  const dur=tMax-tMin,xStep=dur<10?2:dur<30?5:10;
+  for(let t=Math.ceil(tMin/xStep)*xStep;t<=tMax+0.01;t+=xStep){
+    if(t<tMin)continue;
+    ctx.fillText(fmt(t),Math.min(tx(t),W-mr-8),H-2);
+  }
+
+  // グレード別カラーの折れ線
+  ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
+  series.forEach((p,i)=>{
+    if(i===0)return;
+    const prev=series[i-1];
+    const [cls]=mdef?.grade?mdef.grade(p.v):['ok'];
+    ctx.strokeStyle=cls==='ng'?'#e53e3e':cls==='warn'?'#d69e2e':'#48bb78';
+    ctx.beginPath();ctx.moveTo(tx(prev.t),ty(prev.v));ctx.lineTo(tx(p.t),ty(p.v));ctx.stroke();
+  });
+
+  // 最悪値マーカー
+  const worst=series.reduce((a,b)=>{
+    const [ac]=mdef?.grade?mdef.grade(a.v):['ok'];
+    const [bc]=mdef?.grade?mdef.grade(b.v):['ok'];
+    return(GRADE_RANK[bc]||0)>(GRADE_RANK[ac]||0)?b:a;
+  });
+  const [wCls]=mdef?.grade?mdef.grade(worst.v):['ok'];
+  ctx.beginPath();ctx.arc(tx(worst.t),ty(worst.v),5,0,2*Math.PI);
+  ctx.fillStyle=wCls==='ng'?'#e53e3e':wCls==='warn'?'#d69e2e':'#48bb78';
+  ctx.fill(); ctx.strokeStyle='white';ctx.lineWidth=1.5;ctx.stroke();
+
+  // タップでフレームジャンプ
+  cv.onclick=e=>{
+    const rect=cv.getBoundingClientRect();
+    const xRel=(e.clientX-rect.left);
+    const t=tMin+Math.max(0,(xRel-ml)/cW)*(tMax-tMin);
+    if(t>=tMin&&t<=tMax) openVideoLightbox(view,t);
+  };
+}
 
 // ── Clinical comment generation ───────────────────────────────────────────────
 function generateComments(){
