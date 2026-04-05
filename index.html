@@ -895,33 +895,6 @@ function showSummary(){
     html+=`<div class="sec-label" style="margin-bottom:8px">▍ ${view==='side'?'側面':'正面'}解析 ピーク値</div>`;
     keys.forEach(key=>{
       if(key==='hip')return; // boolean, skip
-      // ランジ正面の膝外反はボトム時の値を使用
-      if(currentMove==='lunge'&&view==='front'&&key==='valgus'){
-        const b=t._bottom; if(!b)return;
-        const [cls,lbl]=MDEFS.valgus.grade(b.valgus);
-        if((GRADE_RANK[cls]||0)>(GRADE_RANK[worstGrade]||0))worstGrade=cls;
-        const bc=cls==='ng'?'#e53e3e':cls==='warn'?'#d69e2e':'#38a169';
-        html+=`<div class="peak-row">
-          <div class="peak-info">
-            <div class="card-label">前脚 膝外反 FPPA（ボトム時）</div>
-            <div class="card-val">${MDEFS.valgus.fmt(b.valgus)}</div>
-            <span class="badge ${cls}">${lbl}</span>
-          </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;margin-left:8px">
-            ${b.img?`<img src="${b.img}" class="peak-thumb" style="border:2px solid ${bc}" onclick="openLightbox(this.src)">`:``}
-            <div class="step-group">
-              <button class="jump-btn" onclick="stepFromSummary('front',${b.time.toFixed(2)},-1)">◄</button>
-              <button class="jump-btn" onclick="jumpToFrame('front',${b.time.toFixed(2)})">▶ ${fmt(b.time)}</button>
-              <button class="jump-btn" onclick="stepFromSummary('front',${b.time.toFixed(2)},1)">►</button>
-            </div>
-          </div>
-        </div>`;
-        if(t[key]?.series?.length>=2){
-          html+=`<div class="chart-wrap"><div class="chart-label">前脚 膝外反 FPPA — 時系列 <span style="font-weight:400;color:#a0aec0">（タップでジャンプ）</span></div>
-          <canvas class="chart-cv" data-chart data-view="${view}" data-key="${key}"></canvas></div>`;
-        }
-        return;
-      }
       const w=getWorst(key,t[key]);
       if(!w)return;
       if((GRADE_RANK[w.cls]||0)>(GRADE_RANK[worstGrade]||0))worstGrade=w.cls;
@@ -1093,13 +1066,10 @@ function generateComments(){
   const comments=[];
   const ts=tracking.side, tfront=tracking.front;
 
-  // 膝外反
+  // 膝外反（全動作: series全体の最悪値を使用 = 動作中の worst angle）
   const vKey=tfront.valgus||tfront.lValgus;
   if(vKey){
-    // ランジはボトム時のFPPAを使用、それ以外はseries最悪値（フィルター済み）
-    const minV=currentMove==='lunge'&&tfront._bottom
-      ? tfront._bottom.valgus
-      : Math.min(seriesMin(tfront.valgus)??180, seriesMin(tfront.lValgus)??180, seriesMin(tfront.rValgus)??180);
+    const minV=Math.min(seriesMin(tfront.valgus)??180, seriesMin(tfront.lValgus)??180, seriesMin(tfront.rValgus)??180);
     if(minV<150) comments.push({level:'ng',title:'膝外反（ニーイン）— 高リスク',text:`最大外反角度 ${Math.round(180-minV)}° のニーインが確認されました（FPPA最小値 ${Math.round(minV)}°）。ACL損傷の高リスクパターンです。股関節外転・外旋筋群（中殿筋・深層外旋6筋）の強化と着地フォームの根本的な修正が必要です。`});
     else if(minV<160) comments.push({level:'ng',title:'膝外反（ニーイン）',text:`中等度の膝外反が確認されました（FPPA最小値 ${Math.round(minV)}°）。ACL損傷リスクがあります。股関節外転・外旋筋の強化と動作再教育を推奨します。`});
     else if(minV<170) comments.push({level:'warn',title:'軽度の膝外反',text:`軽度のニーインが見られます（FPPA最小値 ${Math.round(minV)}°）。予防的な筋力強化と動作指導を推奨します。`});
