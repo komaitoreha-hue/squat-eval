@@ -771,7 +771,10 @@ function drawArc(ctx,p1,p2,p3,color){
   const scale=ctx.canvas.width/400;
   const r=Math.round(32*scale);
   const a1=Math.atan2(p1.y-p2.y,p1.x-p2.x),a2=Math.atan2(p3.y-p2.y,p3.x-p2.x);
-  ctx.beginPath();ctx.arc(p2.x,p2.y,r,Math.min(a1,a2),Math.max(a1,a2));ctx.strokeStyle=color;ctx.lineWidth=Math.max(2,3*scale);ctx.stroke();
+  const start=Math.min(a1,a2),end=Math.max(a1,a2);
+  // 常に minor arc（短い方の弧）を描く：span>180°なら反時計回り
+  const ccw=(end-start)>Math.PI;
+  ctx.beginPath();ctx.arc(p2.x,p2.y,r,start,end,ccw);ctx.strokeStyle=color;ctx.lineWidth=Math.max(2,3*scale);ctx.stroke();
 }
 function drawCornerLabels(ctx,labels){
   // labels: [{text, color}, ...]  左上から縦に並べる
