@@ -404,11 +404,10 @@ function updateTracking(view, data, currentTime, canvas) {
       if(ser.length>=2 && Math.abs(ser[ser.length-1].v - ser[ser.length-2].v) < 10) return;
       // 連続変化中（前フレームも動いていた）なら本物の動作として通す
     }
-    let isExtreme = false;
-    if (val < t[key].min) { t[key].min=val; t[key].minTime=currentTime; if(canvas)t[key].minImg=captureThumb(canvas); isExtreme=true; }
-    if (val > t[key].max) { t[key].max=val; t[key].maxTime=currentTime; if(canvas)t[key].maxImg=captureThumb(canvas); isExtreme=true; }
-    // 時系列データ蓄積（約0.1秒間隔）。ただしmin/max更新フレームは必ず記録して最深点を逃さない
-    if(ser.length===0 || isExtreme || currentTime-ser[ser.length-1].t>=0.1) ser.push({t:currentTime,v:val});
+    if (val < t[key].min) { t[key].min=val; t[key].minTime=currentTime; if(canvas)t[key].minImg=captureThumb(canvas); }
+    if (val > t[key].max) { t[key].max=val; t[key].maxTime=currentTime; if(canvas)t[key].maxImg=captureThumb(canvas); }
+    // 時系列データ蓄積（約0.1秒間隔にダウンサンプリング）
+    if(ser.length===0 || currentTime-ser[ser.length-1].t>=0.1) ser.push({t:currentTime,v:val});
   });
   document.getElementById('summaryBtn').disabled = false;
 }
@@ -974,11 +973,11 @@ function drawCharts(){
     const view=cv.dataset.view,key=cv.dataset.key;
     const entry=tracking[view]?.[key];
     if(!entry||!entry.series||entry.series.length<2)return;
-    _drawChart(cv,entry.series,MDEFS[key],view,null,key);
+    _drawChart(cv,entry.series,MDEFS[key],view,null,key,entry);
   });
 }
 
-function _drawChart(cv,series,mdef,view,cursorTime,metricKey){
+function _drawChart(cv,series,mdef,view,cursorTime,metricKey,entry){
   const dpr=Math.min(window.devicePixelRatio||1,2);
   const W=cv.offsetWidth||300,H=cv.offsetHeight||80;
   cv.width=W*dpr; cv.height=H*dpr;
@@ -990,7 +989,12 @@ function _drawChart(cv,series,mdef,view,cursorTime,metricKey){
 
   const vals=series.map(p=>p.v);
   const tMin=series[0].t,tMax=series[series.length-1].t;
-  const dMin=Math.min(...vals),dMax=Math.max(...vals);
+  // Y軸範囲: seriesから算出。entry.min/maxはダウンサンプリングで漏れた極値を補完するために使う
+  let dMin=Math.min(...vals),dMax=Math.max(...vals);
+  if(entry){
+    if(entry.min!=null && entry.min<dMin) dMin=entry.min;
+    if(entry.max!=null && entry.max>dMax) dMax=entry.max;
+  }
   const pad=Math.max((dMax-dMin)*0.25,5);
   const yMin=dMin-pad,yMax=dMax+pad;
 
@@ -1030,8 +1034,13 @@ function _drawChart(cv,series,mdef,view,cursorTime,metricKey){
     ctx.beginPath();ctx.moveTo(tx(prev.t),ty(prev.v));ctx.lineTo(tx(p.t),ty(p.v));ctx.stroke();
   });
 
-  // 最悪値マーカー
-  const worst=series.reduce((a,b)=>{
+  // 最悪値マーカー: entry.min/maxも候補に含める（seriesから漏れた真の極値を反映）
+  const candidates=series.slice();
+  if(entry){
+    if(entry.min!=null&&entry.minTime!=null) candidates.push({t:entry.minTime,v:entry.min});
+    if(entry.max!=null&&entry.maxTime!=null) candidates.push({t:entry.maxTime,v:entry.max});
+  }
+  const worst=candidates.reduce((a,b)=>{
     const [ac]=mdef?.grade?mdef.grade(a.v):['ok'];
     const [bc]=mdef?.grade?mdef.grade(b.v):['ok'];
     return(GRADE_RANK[bc]||0)>(GRADE_RANK[ac]||0)?b:a;
