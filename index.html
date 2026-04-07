@@ -404,11 +404,11 @@ function updateTracking(view, data, currentTime, canvas) {
       if(ser.length>=2 && Math.abs(ser[ser.length-1].v - ser[ser.length-2].v) < 10) return;
       // 連続変化中（前フレームも動いていた）なら本物の動作として通す
     }
-    if (val < t[key].min) { t[key].min=val; t[key].minTime=currentTime; if(canvas)t[key].minImg=captureThumb(canvas); }
-    if (val > t[key].max) { t[key].max=val; t[key].maxTime=currentTime; if(canvas)t[key].maxImg=captureThumb(canvas); }
-    // 時系列データ蓄積: 通常0.1秒間隔だが、急変動中(>10°/frame)は毎フレーム記録して最深点を逃さない
-    const fastChange = prevV!=null && Math.abs(val-prevV)>10;
-    if(ser.length===0 || fastChange || currentTime-ser[ser.length-1].t>=0.1) ser.push({t:currentTime,v:val});
+    let isExtreme = false;
+    if (val < t[key].min) { t[key].min=val; t[key].minTime=currentTime; if(canvas)t[key].minImg=captureThumb(canvas); isExtreme=true; }
+    if (val > t[key].max) { t[key].max=val; t[key].maxTime=currentTime; if(canvas)t[key].maxImg=captureThumb(canvas); isExtreme=true; }
+    // 時系列データ蓄積（約0.1秒間隔）。ただしmin/max更新フレームは必ず記録して最深点を逃さない
+    if(ser.length===0 || isExtreme || currentTime-ser[ser.length-1].t>=0.1) ser.push({t:currentTime,v:val});
   });
   document.getElementById('summaryBtn').disabled = false;
 }
