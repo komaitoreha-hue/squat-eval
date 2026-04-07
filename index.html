@@ -393,17 +393,22 @@ function updateTracking(view, data, currentTime, canvas) {
       const img=canvas?captureThumb(canvas):null;
       t[key] = {min:val, max:val, minTime:currentTime, maxTime:currentTime, minImg:img, maxImg:img, series:[]};
     }
-    // 外れ値フィルター: 直近点の中央値から20°以上離れていたら無視（3点以上で発動）
+    // 外れ値フィルター: 直前値から急変かつ「単発スパイク」のみ除外
+    // - 直前値との差が35°以下なら通す（着地などの急屈曲を許容: 30fpsで20-25°/frame程度まで実在）
+    // - 35°超でも、直前2フレームが安定していて今フレームだけ飛んでいる「単発」なら除外
+    //   （連続して大きく変化＝本物の動作とみなして通す）
     const ser=t[key].series;
-    if(ser.length>=3){
-      const recent=ser.slice(-5).map(p=>p.v).sort((a,b)=>a-b);
-      const median=recent[Math.floor(recent.length/2)];
-      if(Math.abs(val-median)>20) return;
+    const prevV = ser.length>0 ? ser[ser.length-1].v : null;
+    if(prevV!=null && Math.abs(val-prevV)>35){
+      // 直前2点が安定 (差<10°) なら、今フレームは単発スパイクの可能性大 → 除外
+      if(ser.length>=2 && Math.abs(ser[ser.length-1].v - ser[ser.length-2].v) < 10) return;
+      // 連続変化中（前フレームも動いていた）なら本物の動作として通す
     }
     if (val < t[key].min) { t[key].min=val; t[key].minTime=currentTime; if(canvas)t[key].minImg=captureThumb(canvas); }
     if (val > t[key].max) { t[key].max=val; t[key].maxTime=currentTime; if(canvas)t[key].maxImg=captureThumb(canvas); }
-    // 時系列データ蓄積（約0.1秒間隔にダウンサンプリング）
-    if(ser.length===0||currentTime-ser[ser.length-1].t>=0.1) ser.push({t:currentTime,v:val});
+    // 時系列データ蓄積: 通常0.1秒間隔だが、急変動中(>10°/frame)は毎フレーム記録して最深点を逃さない
+    const fastChange = prevV!=null && Math.abs(val-prevV)>10;
+    if(ser.length===0 || fastChange || currentTime-ser[ser.length-1].t>=0.1) ser.push({t:currentTime,v:val});
   });
   document.getElementById('summaryBtn').disabled = false;
 }
