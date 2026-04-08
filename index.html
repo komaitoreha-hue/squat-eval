@@ -189,6 +189,7 @@
     <canvas id="camCanvas"></canvas>
     <div class="phase-badge" id="camPhase">待機中</div>
     <button class="flip-btn" onclick="flipCamera()">カメラ反転</button>
+    <button class="flip-btn" id="mirrorBtn" onclick="toggleMirror()" style="right:auto;left:8px">🪞 ミラー: OFF</button>
   </div>
   <div class="controls">
     <button class="btn btn-primary" id="camStartBtn" onclick="startCamera()">カメラ開始</button>
@@ -401,6 +402,7 @@ function phaseStop(kp,h){const cy=(kp[11].y+kp[12].y)/2;h.push(cy);if(h.length>H
 // ── State ─────────────────────────────────────────────────────────────────────
 let detector=null,cameraRunning=false,camProcessing=false,camStream=null,facingMode='environment';
 let camView='side',currentMove='squat',lastCanvasW=1280;
+let mirrorMode=localStorage.getItem('mirrorMode')==='1';
 const vidProc={side:false,front:false};
 const phaseHist={cam:[],side:[],front:[]};
 
@@ -636,6 +638,8 @@ function getWorst(key, t) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 renderMetricsUI();
+// ミラーボタンの初期ラベル
+{const mb=document.getElementById('mirrorBtn');if(mb)mb.textContent='🪞 ミラー: '+(mirrorMode?'ON':'OFF');}
 // Canvas tap → lightbox
 ['sideCanvas','frontCanvas'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(){
@@ -717,6 +721,12 @@ function stopCamera(){
   document.getElementById('camPhase').textContent='停止中';
 }
 async function flipCamera(){facingMode=facingMode==='environment'?'user':'environment';if(cameraRunning){stopCamera();await startCamera();}}
+function toggleMirror(){
+  mirrorMode=!mirrorMode;
+  localStorage.setItem('mirrorMode',mirrorMode?'1':'0');
+  const btn=document.getElementById('mirrorBtn');
+  if(btn) btn.textContent='🪞 ミラー: '+(mirrorMode?'ON':'OFF');
+}
 async function camLoop(){
   if(!cameraRunning)return;
   const v=document.getElementById('camVideo'),c=document.getElementById('camCanvas');
@@ -793,6 +803,10 @@ async function processFrame(src, canvas, view, histKey, doTrack=false){
     return;
   }
   const kp=remapBlazePose(poses[0].keypoints);
+  // ミラーモード（カメラ時のみ）: 鏡像撮影では検出器の左右ラベルが反転するので入れ替える
+  if(mirrorMode && histKey==='cam'){
+    [[5,6],[7,8],[9,10],[11,12],[13,14],[15,16]].forEach(([a,b])=>{const t=kp[a];kp[a]=kp[b];kp[b]=t;});
+  }
   drawSkeleton(ctx,kp);
   const m=MOVES[currentMove];
   const evalFn=view==='side'?m.sideEval:m.frontEval;
