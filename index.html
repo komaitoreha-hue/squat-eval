@@ -564,18 +564,15 @@ function closeLightbox(){
 })();
 
 // Return the value with worst clinical grade (min or max, whichever is worse)
+// 値・時刻・サムネイル画像をすべて同じ瞬間に揃える（min/max を直接参照）
 function getWorst(key, t) {
-  if (!t || !MDEFS[key] || !t.series?.length) return null;
-  // series（外れ値フィルター済み）から最悪グレードの点を探す
-  const worst = t.series.reduce((best, p) => {
-    const [bc] = MDEFS[key].grade(p.v);
-    const [ac] = MDEFS[key].grade(best.v);
-    return (GRADE_RANK[bc]||0) > (GRADE_RANK[ac]||0) ? p : best;
-  });
-  const [cls] = MDEFS[key].grade(worst.v);
-  // サムネイルはmin/maxImgから近い方を流用
-  const img = Math.abs(worst.v-(t.min??worst.v)) < Math.abs(worst.v-(t.max??worst.v)) ? t.minImg : t.maxImg;
-  return {val:worst.v, time:worst.t, cls, img};
+  if (!t || !MDEFS[key] || t.min==null || t.max==null) return null;
+  const [minCls] = MDEFS[key].grade(t.min);
+  const [maxCls] = MDEFS[key].grade(t.max);
+  const useMin = (GRADE_RANK[minCls]||0) >= (GRADE_RANK[maxCls]||0);
+  return useMin
+    ? {val:t.min, time:t.minTime, cls:minCls, img:t.minImg}
+    : {val:t.max, time:t.maxTime, cls:maxCls, img:t.maxImg};
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1038,17 +1035,21 @@ function _drawChart(cv,series,mdef,view,cursorTime,metricKey,entry){
     ctx.beginPath();ctx.moveTo(tx(prev.t),ty(prev.v));ctx.lineTo(tx(p.t),ty(p.v));ctx.stroke();
   });
 
-  // 最悪値マーカー: entry.min/maxも候補に含める（seriesから漏れた真の極値を反映）
-  const candidates=series.slice();
-  if(entry){
-    if(entry.min!=null&&entry.minTime!=null) candidates.push({t:entry.minTime,v:entry.min});
-    if(entry.max!=null&&entry.maxTime!=null) candidates.push({t:entry.maxTime,v:entry.max});
+  // 最悪値マーカー: getWorstと同じ点を使ってサマリー表示と一致させる
+  let worst;
+  if(entry && entry.min!=null && entry.max!=null && mdef?.grade){
+    const [minCls]=mdef.grade(entry.min);
+    const [maxCls]=mdef.grade(entry.max);
+    worst = (GRADE_RANK[minCls]||0)>=(GRADE_RANK[maxCls]||0)
+      ? {t:entry.minTime, v:entry.min}
+      : {t:entry.maxTime, v:entry.max};
+  } else {
+    worst=series.reduce((a,b)=>{
+      const [ac]=mdef?.grade?mdef.grade(a.v):['ok'];
+      const [bc]=mdef?.grade?mdef.grade(b.v):['ok'];
+      return(GRADE_RANK[bc]||0)>(GRADE_RANK[ac]||0)?b:a;
+    });
   }
-  const worst=candidates.reduce((a,b)=>{
-    const [ac]=mdef?.grade?mdef.grade(a.v):['ok'];
-    const [bc]=mdef?.grade?mdef.grade(b.v):['ok'];
-    return(GRADE_RANK[bc]||0)>(GRADE_RANK[ac]||0)?b:a;
-  });
   const [wCls]=mdef?.grade?mdef.grade(worst.v):['ok'];
   ctx.beginPath();ctx.arc(tx(worst.t),ty(worst.v),5,0,2*Math.PI);
   ctx.fillStyle=wCls==='ng'?'#e53e3e':wCls==='warn'?'#d69e2e':'#48bb78';
