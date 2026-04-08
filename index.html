@@ -318,47 +318,51 @@ function bestSide(kp){const lv=ok(kp,5,11,13,15)?Math.min(kp[5].score,kp[11].sco
 function fmt(s){if(!isFinite(s))return'0:00';return`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;}
 
 // ── Eval functions ────────────────────────────────────────────────────────────
-function evalGenericSide(kp){const s=bestSide(kp);if(!s)return null;const knee=calcAngle(s.hip,s.knee,s.ank),trunk=fwdLean(s.sh,s.hip),hip=s.hip.y>s.knee.y,lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):null,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):null;return{knee,trunk,hip,sym:lK!=null&&rK!=null?Math.abs(lK-rK):null};}
+function evalGenericSide(kp){
+  const s=bestSide(kp);if(!s)return null;
+  const knee=calcAngle(s.hip,s.knee,s.ank),trunk=fwdLean(s.sh,s.hip),hip=s.hip.y>s.knee.y;
+  const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):null;
+  const rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):null;
+  // 左右対称性: 両膝屈曲時のみ評価（立位時のランドマークノイズを除外）
+  const bothFlexed=lK!=null&&rK!=null&&lK<160&&rK<160;
+  const sym=bothFlexed?Math.abs(lK-rK):null;
+  // _frontKnee: updateTracking側で「最深点付近のみsymを記録」するゲート用
+  const depthProxy=(lK!=null&&rK!=null)?Math.min(lK,rK):(lK??rK??knee);
+  return{knee,trunk,hip,sym,_frontKnee:depthProxy};
+}
 function evalLungeSide(kp){if(!ok(kp,11,13,15)&&!ok(kp,12,14,16))return null;const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180,rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180,s=bestSide(kp);return{frontKnee:Math.min(lK,rK),rearKnee:Math.max(lK,rK),trunk:s?fwdLean(s.sh,s.hip):0,pelvic:ok(kp,11,12)?pelvTilt(kp):0};}
 // null安全なFPPA最小値（両方nullなら null を返す）
 function minFPPA(a,b){if(a==null&&b==null)return null;if(a==null)return b;if(b==null)return a;return Math.min(a,b);}
 function evalGenericFront(kp){
   const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null;
   const rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null;
-  // 立位時のFPPAノイズを除外: 正面からの2D膝角度で屈曲フレームのみvalgusを採用
   const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180;
   const rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180;
-  const flexed=Math.min(lK,rK)<160; // 膝屈曲20°以上で「屈曲中」とみなす
-  const valgus=flexed?minFPPA(lV,rV):null;
-  return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
+  // _frontKnee: updateTracking側で最深点付近のみ valgus を記録するゲートに使う
+  return{valgus:minFPPA(lV,rV),pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,_frontKnee:Math.min(lK,rK)};
 }
 function evalSingleFront(kp){
   const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];
   if(!ok(kp,hi,ki,ai))return null;
   const kAng=calcAngle(kp[hi],kp[ki],kp[ai]);
-  const valgus=(kAng<160)?calcFPPA(kp[hi],kp[ki],kp[ai],sr):null;
-  if(valgus==null)return{valgus:null,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
-  return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
+  const valgus=calcFPPA(kp[hi],kp[ki],kp[ai],sr);
+  return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,_frontKnee:kAng};
 }
 function evalJumpFront(kp){
   const lv=ok(kp,11,13,15),rv=ok(kp,12,14,16);if(!lv&&!rv)return null;
-  // 着地時(膝屈曲中)のみFPPAを記録、立位/空中は無視
   const lK=lv?calcAngle(kp[11],kp[13],kp[15]):180;
   const rK=rv?calcAngle(kp[12],kp[14],kp[16]):180;
-  const lFlexed=lK<160, rFlexed=rK<160;
-  const lVal=(lv&&lFlexed)?calcFPPA(kp[11],kp[13],kp[15],false):null;
-  const rVal=(rv&&rFlexed)?calcFPPA(kp[12],kp[14],kp[16],true):null;
+  const lVal=lv?calcFPPA(kp[11],kp[13],kp[15],false):null;
+  const rVal=rv?calcFPPA(kp[12],kp[14],kp[16],true):null;
   if(lVal==null&&rVal==null)return null;
-  return{lValgus:lVal,rValgus:rVal,sym:(lVal!=null&&rVal!=null)?Math.abs(lVal-rVal):null};
+  return{lValgus:lVal,rValgus:rVal,sym:(lVal!=null&&rVal!=null)?Math.abs(lVal-rVal):null,_frontKnee:Math.min(lK,rK)};
 }
 function evalCutFront(kp){
   const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null;
   const rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null;
   const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180;
   const rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180;
-  const flexed=Math.min(lK,rK)<160;
-  const valgus=flexed?minFPPA(lV,rV):null;
-  return{valgus,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0};
+  return{valgus:minFPPA(lV,rV),trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,_frontKnee:Math.min(lK,rK)};
 }
 // ランジ専用: 後脚の膝は床に近く正面からFPPAが不正確なため、前脚のみ評価
 function evalLungeFront(kp){
@@ -423,10 +427,35 @@ function captureThumb(canvas) {
   } catch(e) { return null; }
 }
 
+// valgus系メトリクスは「最深点付近のみ」記録するためのキー一覧
+const VALGUS_KEYS = new Set(['valgus','lValgus','rValgus','sym']);
+const NEAR_BOTTOM_RANGE = 20; // 最深 +20° 以内のみ valgus 記録対象
+const NEW_BOTTOM_DELTA = 10;  // 既存最深より 10° 以上深くなったら過去 valgus データを破棄
+
 function updateTracking(view, data, currentTime, canvas) {
   const t = tracking[view];
+
+  // _frontKnee: eval関数からの隠しフィールド。最深点付近ゲートに使用
+  const frontKnee = (typeof data._frontKnee==='number'&&isFinite(data._frontKnee))?data._frontKnee:null;
+  delete data._frontKnee;
+
+  if(frontKnee!=null){
+    if(t._deepestKnee==null || frontKnee < t._deepestKnee){
+      const wasDeeper = t._deepestKnee!=null && (t._deepestKnee - frontKnee) > NEW_BOTTOM_DELTA;
+      t._deepestKnee = frontKnee;
+      // 大幅に深い新ボトム発見 → 過去のvalgus系トラッキングを破棄
+      if(wasDeeper){
+        VALGUS_KEYS.forEach(k=>{ if(t[k]) delete t[k]; });
+      }
+    }
+  }
+  // 現在フレームが「最深付近」かどうか
+  const inBottomZone = frontKnee!=null && t._deepestKnee!=null && (frontKnee - t._deepestKnee) <= NEAR_BOTTOM_RANGE && frontKnee < 160;
+
   Object.entries(data).forEach(([key, val]) => {
     if (typeof val !== 'number' || !isFinite(val)) return;
+    // valgus系メトリクスは最深点付近のフレームのみ記録
+    if (VALGUS_KEYS.has(key) && !inBottomZone) return;
     if (!t[key]) {
       const img=canvas?captureThumb(canvas):null;
       t[key] = {min:val, max:val, minTime:currentTime, maxTime:currentTime, minImg:img, maxImg:img, series:[]};
