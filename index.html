@@ -377,11 +377,15 @@ const tracking={side:{},front:{}};
 // ── Tracking helpers ──────────────────────────────────────────────────────────
 function captureThumb(canvas) {
   try {
+    // 拡大表示時に耐えられるよう高解像度で保存（最大幅720px）
     const off=document.createElement('canvas');
-    const scale=120/canvas.width;
-    off.width=120; off.height=Math.round(canvas.height*scale);
-    off.getContext('2d').drawImage(canvas,0,0,off.width,off.height);
-    return off.toDataURL('image/jpeg',0.6);
+    const targetW=Math.min(720,canvas.width);
+    const scale=targetW/canvas.width;
+    off.width=targetW; off.height=Math.round(canvas.height*scale);
+    const octx=off.getContext('2d');
+    octx.imageSmoothingEnabled=true; octx.imageSmoothingQuality='high';
+    octx.drawImage(canvas,0,0,off.width,off.height);
+    return off.toDataURL('image/jpeg',0.88);
   } catch(e) { return null; }
 }
 
