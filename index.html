@@ -637,13 +637,22 @@ function getWorst(key, t) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 renderMetricsUI();
 // Canvas tap → lightbox
-['sideCanvas','frontCanvas'].forEach(id=>{
-  document.getElementById(id).addEventListener('click',function(){
-    const view=id.replace('Canvas','');
+['side','front'].forEach(view=>{
+  const cv=document.getElementById(view+'Canvas');
+  cv.addEventListener('click',function(e){
     const v=document.getElementById(view+'Vid');
-    if(v&&v.src&&v.duration) openVideoLightbox(view,v.currentTime);
-    else if(this.width>0) openLightbox(this.toDataURL('image/jpeg',0.92));
+    if(v&&v.src&&v.duration){ openVideoLightbox(view,v.currentTime); return; }
+    if(this.width>0){ openLightbox(this.toDataURL('image/jpeg',0.92)); return; }
+    document.getElementById(view+'File').click();
   });
+  // 動画未読込み時はcanvasが幅0でクリックを受けないため、親のmedia-wrapにもハンドラを追加
+  const wrap=cv.parentElement;
+  wrap.addEventListener('click',function(e){
+    if(e.target===cv)return; // canvasのハンドラに任せる
+    const v=document.getElementById(view+'Vid');
+    if(!v||!v.src||!v.duration) document.getElementById(view+'File').click();
+  });
+  wrap.style.cursor='pointer';
 });
 document.getElementById('camCanvas').addEventListener('click',function(){
   if(this.width>0) openLightbox(this.toDataURL('image/jpeg',0.92));
