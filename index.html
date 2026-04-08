@@ -265,12 +265,12 @@ const GRADE_RANK={ng:3,warn:2,ok:1,na:0};
 
 // ── Movement configs ──────────────────────────────────────────────────────────
 const MOVES={
-  squat:     {label:'スクワット',   sideTip:'全身が映るよう側面から（1.5〜2m）。',          frontTip:'全身が映るよう正面から（1.5〜2m）。',            sideKeys:['knee','trunk','hip','sym'],             frontKeys:['valgus','pelvicDrop'],            sideEval:evalGenericSide, frontEval:evalGenericFront, phaseFn:phaseSquat},
-  lunge:     {label:'ランジ',       sideTip:'側面から。前後の足が両方映るよう調整。',         frontTip:'正面から。前膝外反・骨盤安定性を確認。',           sideKeys:['frontKnee','rearKnee','trunk','pelvic'],  frontKeys:['valgus','pelvicDrop','trunkLat'], sideEval:evalLungeSide,   frontEval:evalLungeFront, phaseFn:phaseLunge},
-  singleLeg: {label:'片足SQ',       sideTip:'側面から全身が映るよう撮影。',                   frontTip:'正面から。ニーイン・骨盤下制を確認（最重要）。',   sideKeys:['knee','trunk'],                          frontKeys:['valgus','pelvicDrop','trunkLat'], sideEval:evalGenericSide, frontEval:evalSingleFront,  phaseFn:phaseSingleLeg},
-  jump:      {label:'ジャンプ着地', sideTip:'側面から。着地時の膝屈曲・体幹を確認。',        frontTip:'正面から。着地時の両膝外反を確認（最重要）。',     sideKeys:['knee','trunk'],                          frontKeys:['lValgus','rValgus','sym'],        sideEval:evalGenericSide, frontEval:evalJumpFront,    phaseFn:phaseJump},
-  cut:       {label:'切り返し',     sideTip:'側面から。接地時の膝屈曲・体幹前傾を確認。',    frontTip:'正面から。切り返し時のニーインを確認（最重要）。', sideKeys:['knee','trunk'],                          frontKeys:['valgus','trunkLat'],              sideEval:evalGenericSide, frontEval:evalCutFront,     phaseFn:phaseCut},
-  stop:      {label:'ストップ',     sideTip:'側面から。制動時の膝屈曲・体幹を確認。',        frontTip:'正面から。制動時の膝外反を確認。',               sideKeys:['knee','trunk','hip'],                    frontKeys:['valgus','pelvicDrop'],            sideEval:evalGenericSide, frontEval:evalGenericFront, phaseFn:phaseStop},
+  squat:     {label:'スクワット',   sideTip:'全身が映るよう側面から（1.5〜2m）。',          frontTip:'全身が映るよう正面から（1.5〜2m）。',            sideKeys:['knee','trunk','hip','sym'],             frontKeys:['valgus','tibia','pelvicDrop'],            sideEval:evalGenericSide, frontEval:evalGenericFront, phaseFn:phaseSquat},
+  lunge:     {label:'ランジ',       sideTip:'側面から。前後の足が両方映るよう調整。',         frontTip:'正面から。前膝外反・骨盤安定性を確認。',           sideKeys:['frontKnee','rearKnee','trunk','pelvic'],  frontKeys:['valgus','tibia','pelvicDrop','trunkLat'], sideEval:evalLungeSide,   frontEval:evalLungeFront, phaseFn:phaseLunge},
+  singleLeg: {label:'片足SQ',       sideTip:'側面から全身が映るよう撮影。',                   frontTip:'正面から。ニーイン・骨盤下制を確認(最重要)。',   sideKeys:['knee','trunk'],                          frontKeys:['valgus','tibia','pelvicDrop','trunkLat'], sideEval:evalGenericSide, frontEval:evalSingleFront,  phaseFn:phaseSingleLeg},
+  jump:      {label:'ジャンプ着地', sideTip:'側面から。着地時の膝屈曲・体幹を確認。',        frontTip:'正面から。着地時の両膝外反を確認(最重要)。',     sideKeys:['knee','trunk'],                          frontKeys:['lValgus','rValgus','tibia','sym'],        sideEval:evalGenericSide, frontEval:evalJumpFront,    phaseFn:phaseJump},
+  cut:       {label:'切り返し',     sideTip:'側面から。接地時の膝屈曲・体幹前傾を確認。',    frontTip:'正面から。切り返し時のニーインを確認(最重要)。', sideKeys:['knee','trunk'],                          frontKeys:['valgus','tibia','trunkLat'],              sideEval:evalGenericSide, frontEval:evalCutFront,     phaseFn:phaseCut},
+  stop:      {label:'ストップ',     sideTip:'側面から。制動時の膝屈曲・体幹を確認。',        frontTip:'正面から。制動時の膝外反を確認。',               sideKeys:['knee','trunk','hip'],                    frontKeys:['valgus','tibia','pelvicDrop'],            sideEval:evalGenericSide, frontEval:evalGenericFront, phaseFn:phaseStop},
 };
 
 // ── Metric definitions ────────────────────────────────────────────────────────
@@ -287,6 +287,7 @@ const MDEFS={
   frontKnee: {label:'前脚 膝角度',  fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>145?['na','立位']:v>120?['warn','やや浅い']:v>=60?['ok','良好']:['warn','深すぎ']},
   rearKnee:  {label:'後脚 膝角度',  fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v>145?['na','立位']:v>120?['warn','やや浅い']:v>=60?['ok','良好']:['warn','深すぎ']},
   pelvic:    {label:'骨盤安定性',   fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v<5?['ok','安定']:v<12?['warn','注意']:['ng','不安定']},
+  tibia:     {label:'脛骨前額面傾斜',fmt:v=>`${Math.round(v)}<span class="unit"> °</span>`, grade:v=> v<5?['ok','ほぼ垂直']:v<10?['ok','軽度']:v<15?['warn','中等度傾斜']:['ng','強い傾斜']},
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -305,6 +306,20 @@ function calcFPPA(hip,knee,ank,isRightLeg){
   const fppa=isValgus?angle:360-angle;
   if(fppa<100||fppa>260)return null;
   return fppa;
+}
+// 脛骨前額面傾斜角: 膝→足首ベクトルの垂直からの偏位（絶対値、度）
+// 0°=垂直、大きいほど脛骨が前額面で傾いている（足部回内・距骨下回内などを反映）
+function tibiaIncl(knee,ank){
+  const dy=ank.y-knee.y;if(dy<5)return null; // 膝が足首より下/同じ高さは無効
+  return Math.abs(Math.atan2(knee.x-ank.x,dy)*180/Math.PI);
+}
+// 左右脛骨傾斜の最大値（悪い方）を返す
+function maxTibia(kp){
+  const lT=ok(kp,13,15)?tibiaIncl(kp[13],kp[15]):null;
+  const rT=ok(kp,14,16)?tibiaIncl(kp[14],kp[16]):null;
+  if(lT==null&&rT==null)return null;
+  if(lT==null)return rT;if(rT==null)return lT;
+  return Math.max(lT,rT);
 }
 function ok(kp,...ii){return ii.every(i=>kp[i]&&kp[i].score>.3);}
 function avg(a){return a.reduce((s,v)=>s+v,0)/a.length;}
@@ -336,14 +351,15 @@ function evalGenericFront(kp){
   const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180;
   const rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180;
   // _frontKnee: updateTracking側で最深点付近のみ valgus を記録するゲートに使う
-  return{valgus:minFPPA(lV,rV),pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,_frontKnee:Math.min(lK,rK)};
+  return{valgus:minFPPA(lV,rV),tibia:maxTibia(kp),pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,_frontKnee:Math.min(lK,rK)};
 }
 function evalSingleFront(kp){
   const sr=kp[16].y>kp[15].y,[hi,ki,ai]=sr?[12,14,16]:[11,13,15];
   if(!ok(kp,hi,ki,ai))return null;
   const kAng=calcAngle(kp[hi],kp[ki],kp[ai]);
   const valgus=calcFPPA(kp[hi],kp[ki],kp[ai],sr);
-  return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,_frontKnee:kAng};
+  const tibia=tibiaIncl(kp[ki],kp[ai]);
+  return{valgus,tibia,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,_frontKnee:kAng};
 }
 function evalJumpFront(kp){
   const lv=ok(kp,11,13,15),rv=ok(kp,12,14,16);if(!lv&&!rv)return null;
@@ -352,14 +368,14 @@ function evalJumpFront(kp){
   const lVal=lv?calcFPPA(kp[11],kp[13],kp[15],false):null;
   const rVal=rv?calcFPPA(kp[12],kp[14],kp[16],true):null;
   if(lVal==null&&rVal==null)return null;
-  return{lValgus:lVal,rValgus:rVal,sym:(lVal!=null&&rVal!=null)?Math.abs(lVal-rVal):null,_frontKnee:Math.min(lK,rK)};
+  return{lValgus:lVal,rValgus:rVal,sym:(lVal!=null&&rVal!=null)?Math.abs(lVal-rVal):null,tibia:maxTibia(kp),_frontKnee:Math.min(lK,rK)};
 }
 function evalCutFront(kp){
   const lV=ok(kp,11,13,15)?calcFPPA(kp[11],kp[13],kp[15],false):null;
   const rV=ok(kp,12,14,16)?calcFPPA(kp[12],kp[14],kp[16],true):null;
   const lK=ok(kp,11,13,15)?calcAngle(kp[11],kp[13],kp[15]):180;
   const rK=ok(kp,12,14,16)?calcAngle(kp[12],kp[14],kp[16]):180;
-  return{valgus:minFPPA(lV,rV),trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,_frontKnee:Math.min(lK,rK)};
+  return{valgus:minFPPA(lV,rV),tibia:maxTibia(kp),trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,_frontKnee:Math.min(lK,rK)};
 }
 // ランジ専用: 後脚の膝は床に近く正面からFPPAが不正確なため、前脚のみ評価
 function evalLungeFront(kp){
@@ -377,7 +393,11 @@ function evalLungeFront(kp){
   else if(yDiff<-thresh){ valgus=rFPPA; frontKneeY=kp[14].y; }
   else                  { valgus=minFPPA(lFPPA,rFPPA); frontKneeY=Math.max(kp[13].y,kp[14].y); }
   if(valgus==null)return null;
-  return{valgus,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,frontKneeY};
+  // 前脚側のみの脛骨傾斜（後脚は床に近く不正確）
+  const tibia = (yDiff>thresh)?(ok(kp,13,15)?tibiaIncl(kp[13],kp[15]):null)
+              : (yDiff<-thresh)?(ok(kp,14,16)?tibiaIncl(kp[14],kp[16]):null)
+              : maxTibia(kp);
+  return{valgus,tibia,pelvicDrop:ok(kp,11,12)?pelvTilt(kp):0,trunkLat:ok(kp,5,6,11,12)?latLean(kp):0,frontKneeY};
 }
 
 // ── Phase functions ───────────────────────────────────────────────────────────
@@ -426,7 +446,7 @@ function captureThumb(canvas) {
 }
 
 // valgus系メトリクスは「最深点付近のみ」記録するためのキー一覧
-const VALGUS_KEYS = new Set(['valgus','lValgus','rValgus','sym']);
+const VALGUS_KEYS = new Set(['valgus','lValgus','rValgus','sym','tibia']);
 const NEAR_BOTTOM_RANGE = 20; // 最深 +20° 以内のみ valgus 記録対象
 const NEW_BOTTOM_DELTA = 10;  // 既存最深より 10° 以上深くなったら過去 valgus データを破棄
 
