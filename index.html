@@ -165,13 +165,9 @@
 
 <header>
   <h1>小牧いとう整形外科<br><span style="font-size:0.7em;letter-spacing:0.05em;opacity:0.92">Sports Motion Analysis System</span></h1>
-  <span>AI姿勢解析</span>
+  <button id="modeToggleBtn" onclick="toggleMode()" title="リアルタイムカメラに切替"
+    style="background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:white;border-radius:8px;padding:6px 10px;font-size:18px;cursor:pointer;line-height:1">📷</button>
 </header>
-
-<div class="tabs">
-  <div class="tab active" onclick="switchTab('cam')">カメラ (リアルタイム)</div>
-  <div class="tab" onclick="switchTab('vid')">動画解析 (側面+正面)</div>
-</div>
 
 <div class="move-bar">
   <button class="move-btn active" data-move="squat"     onclick="selectMove('squat')">スクワット</button>
@@ -183,7 +179,7 @@
 </div>
 
 <!-- ══ CAMERA ══ -->
-<div class="panel active" id="camPanel">
+<div class="panel" id="camPanel">
   <div class="view-toggle">
     <button class="vtb active" id="vtbSide"  onclick="setCamView('side')">側面撮影中</button>
     <button class="vtb"        id="vtbFront" onclick="setCamView('front')">正面撮影中</button>
@@ -206,7 +202,7 @@
 </div>
 
 <!-- ══ VIDEO ══ -->
-<div class="panel" id="vidPanel">
+<div class="panel active" id="vidPanel">
   <div class="dual-panel">
     <div class="vid-pane">
       <div class="pane-hdr">側面</div>
@@ -684,10 +680,18 @@ function updateCamTip(){
 
 // ── Tab ───────────────────────────────────────────────────────────────────────
 function switchTab(t){
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0&&t==='cam')||(i===1&&t==='vid')));
   document.getElementById('camPanel').classList.toggle('active',t==='cam');
   document.getElementById('vidPanel').classList.toggle('active',t==='vid');
+  const btn=document.getElementById('modeToggleBtn');
+  if(btn){
+    btn.textContent = t==='cam' ? '🎬' : '📷';
+    btn.title = t==='cam' ? '動画解析に戻る' : 'リアルタイムカメラに切替';
+  }
   if(t==='vid')stopCamera();
+}
+function toggleMode(){
+  const camActive=document.getElementById('camPanel').classList.contains('active');
+  switchTab(camActive?'vid':'cam');
 }
 
 // ── Camera ────────────────────────────────────────────────────────────────────
